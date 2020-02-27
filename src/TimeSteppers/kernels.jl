@@ -6,8 +6,18 @@
 function calculate_interior_source_terms!(G, arch, grid, coriolis, buoyancy, surface_waves, closure, U, C, pHY′, K, F, parameters, time)
     # Manually choose thread-block layout here as it's ~20% faster.
     # See: https://github.com/climate-machine/Oceananigans.jl/pull/308
-    Tx, Ty = 16, 16 # CUDA threads per block
-    Bx, By, Bz = floor(Int, grid.Nx/Tx), floor(Int, grid.Ny/Ty), grid.Nz  # Blocks in grid
+    Nx, Ny, Nz = grid.Nx, grid.Ny, grid.Nz
+
+    if Nx == 1
+        Tx, Ty = 1, min(256, Ny)
+        Bx, By, Bz = Tx, floor(Int, Ny/Ty), Nz
+    elseif Ny == 1
+        Tx, Ty = min(256, Nx), 1
+        Bx, By, Bz = floor(Int, Nx/Tx), Ty, Nz
+    else
+        Tx, Ty = 16, 16
+        Bx, By, Bz = floor(Int, Nx/Tx), floor(Int, Ny/Ty), Nz
+    end
 
     @launch(device(arch), threads=(Tx, Ty), blocks=(Bx, By, Bz),
             calculate_Gu!(G.u, grid, coriolis, surface_waves, closure, U, C, K, F, pHY′, parameters, time))
@@ -82,20 +92,18 @@ function calculate_Gc!(Gc, grid, c, tracer_index, closure, buoyancy, U, C, K, Fc
 end
 
 """ Apply boundary conditions by adding flux divergences to the right-hand-side. """
-function calculate_boundary_source_terms!(Gⁿ, bcs, arch, grid, args...)
+function calculate_boundary_source_terms!(Gⁿ, arch, U, C, args...)
 
     # Velocity fields
     for i in 1:3
-        ubcs = bcs[i]
-        apply_z_bcs!(Gⁿ[i], arch, grid, ubcs.z.bottom, ubcs.z.top,   args...)
-        apply_y_bcs!(Gⁿ[i], arch, grid, ubcs.y.left,   ubcs.y.right, args...)
+        apply_z_bcs!(Gⁿ[i], U[i], arch, args...)
+        apply_y_bcs!(Gⁿ[i], U[i], arch, args...)
     end
 
     # Tracer fields
-    for i in 4:length(bcs)
-        cbcs = bcs[i]
-        apply_z_bcs!(Gⁿ[i], arch, grid, cbcs.z.bottom, cbcs.z.top,   args...)
-        apply_y_bcs!(Gⁿ[i], arch, grid, cbcs.y.left,   cbcs.y.right, args...)
+    for i in 4:length(Gⁿ)
+        apply_z_bcs!(Gⁿ[i], C[i-3], arch, args...)
+        apply_y_bcs!(Gⁿ[i], C[i-3], arch, args...)
     end
 
     return nothing
@@ -168,10 +176,10 @@ the `buoyancy_perturbation` downwards:
 """
 function update_hydrostatic_pressure!(pHY′, grid, buoyancy, C)
     @loop_xy i j grid begin
-        @inbounds pHY′[i, j, grid.Nz] = - ℑzᵃᵃᶠ(i, j, grid.Nz, grid, buoyancy_perturbation, buoyancy, C) * ΔzF(i, j, grid.Nz, grid)
+        @inbounds pHY′[i, j, grid.Nz] = - ℑzᵃᵃᶠ(i, j, grid.Nz+1, grid, buoyancy_perturbation, buoyancy, C) * ΔzF(i, j, grid.Nz+1, grid)
         @unroll for k in grid.Nz-1 : -1 : 1
             @inbounds pHY′[i, j, k] =
-                pHY′[i, j, k+1] - ℑzᵃᵃᶠ(i, j, k+1, grid, buoyancy_perturbation, buoyancy, C) * ΔzF(i, j, k, grid)
+                pHY′[i, j, k+1] - ℑzᵃᵃᶠ(i, j, k+1, grid, buoyancy_perturbation, buoyancy, C) * ΔzF(i, j, k+1, grid)
         end
     end
     return nothing

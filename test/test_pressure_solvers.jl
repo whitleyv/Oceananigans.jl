@@ -1,28 +1,25 @@
 using Oceananigans.Solvers: solve_poisson_equation!
 
 function ∇²!(grid, f, ∇²f)
-    @loop for k in (1:grid.Nz; (blockIdx().z - 1) * blockDim().z + threadIdx().z)
-        @loop for j in (1:grid.Ny; (blockIdx().y - 1) * blockDim().y + threadIdx().y)
-            @loop for i in (1:grid.Nx; (blockIdx().x - 1) * blockDim().x + threadIdx().x)
-                @inbounds ∇²f[i, j, k] = ∇²(i, j, k, grid, f)
-            end
-        end
+    @loop_xyz i j k grid begin
+        @inbounds ∇²f[i, j, k] = ∇²(i, j, k, grid, f)
     end
 end
 
 function pressure_solver_instantiates(FT, Nx, Ny, Nz, planner_flag)
-    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(100, 100, 100))
-    solver = PressureSolver(CPU(), grid, HorizontallyPeriodicBCs(), planner_flag)
+    grid = RegularCartesianGrid(FT, size=(Nx, Ny, Nz), length=(100, 100, 100))
+    solver = PressureSolver(CPU(), grid, PressureBoundaryConditions(grid), planner_flag)
     return true  # Just making sure the PressureSolver does not error/crash.
 end
 
 function poisson_ppn_planned_div_free_cpu(FT, Nx, Ny, Nz, planner_flag)
     arch = CPU()
-    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6))
-    fbcs = HorizontallyPeriodicBCs()
+    grid = RegularCartesianGrid(FT, size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6))
+    fbcs = TracerBoundaryConditions(grid)
+    pbcs = PressureBoundaryConditions(grid)
     solver = PressureSolver(arch, grid, fbcs)
 
-    RHS = CellField(FT, arch, grid)
+    RHS = CellField(FT, arch, grid, fbcs)
     interior(RHS) .= rand(Nx, Ny, Nz)
     interior(RHS) .= interior(RHS) .- mean(interior(RHS))
 
@@ -30,26 +27,27 @@ function poisson_ppn_planned_div_free_cpu(FT, Nx, Ny, Nz, planner_flag)
     solver.storage .= interior(RHS)
     solve_poisson_equation!(solver, grid)
 
-    ϕ   = CellField(FT, arch, grid)
-    ∇²ϕ = CellField(FT, arch, grid)
+    ϕ   = CellField(FT, arch, grid, pbcs)
+    ∇²ϕ = CellField(FT, arch, grid, pbcs)
 
     interior(ϕ) .= real.(solver.storage)
 
-    fill_halo_regions!(ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(ϕ, arch)
     ∇²!(grid, ϕ, ∇²ϕ)
 
-    fill_halo_regions!(∇²ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(∇²ϕ, arch)
 
     interior(∇²ϕ) ≈ interior(RHS_orig)
 end
 
 function poisson_pnn_planned_div_free_cpu(FT, Nx, Ny, Nz, planner_flag)
     arch = CPU()
-    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6))
-    fbcs = ChannelBCs()
+    grid = RegularCartesianGrid(FT, size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6), topology=(Periodic, Bounded, Bounded))
+    fbcs = TracerBoundaryConditions(grid)
+    pbcs = PressureBoundaryConditions(grid)
     solver = PressureSolver(arch, grid, fbcs)
 
-    RHS = CellField(FT, arch, grid)
+    RHS = CellField(FT, arch, grid, fbcs)
     interior(RHS) .= rand(Nx, Ny, Nz)
     interior(RHS) .= interior(RHS) .- mean(interior(RHS))
 
@@ -59,24 +57,24 @@ function poisson_pnn_planned_div_free_cpu(FT, Nx, Ny, Nz, planner_flag)
 
     solve_poisson_equation!(solver, grid)
 
-    ϕ   = CellField(FT, arch, grid)
-    ∇²ϕ = CellField(FT, arch, grid)
+    ϕ   = CellField(FT, arch, grid, pbcs)
+    ∇²ϕ = CellField(FT, arch, grid, pbcs)
 
     interior(ϕ) .= real.(solver.storage)
 
-    fill_halo_regions!(ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(ϕ, arch)
     ∇²!(grid, ϕ, ∇²ϕ)
 
-    fill_halo_regions!(∇²ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(∇²ϕ, arch)
 
     interior(∇²ϕ) ≈ interior(RHS_orig)
 end
 
 function poisson_ppn_planned_div_free_gpu(FT, Nx, Ny, Nz)
     arch = GPU()
-    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6))
-    fbcs = HorizontallyPeriodicBCs()
-    solver = PressureSolver(arch, grid, fbcs)
+    grid = RegularCartesianGrid(FT, size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6))
+    pbcs = PressureBoundaryConditions(grid)
+    solver = PressureSolver(arch, grid, pbcs)
 
     RHS = rand(Nx, Ny, Nz)
     RHS .= RHS .- mean(RHS)
@@ -97,23 +95,23 @@ function poisson_ppn_planned_div_free_gpu(FT, Nx, Ny, Nz)
     solver.storage .= CuArray(reshape(permutedims(cat(solver.storage[:, :, 1:Int(Nz/2)],
                                                       solver.storage[:, :, end:-1:Int(Nz/2)+1]; dims=4), (1, 2, 4, 3)), Nx, Ny, Nz))
 
-    ϕ   = CellField(FT, arch, grid)
-    ∇²ϕ = CellField(FT, arch, grid)
+    ϕ   = CellField(FT, arch, grid, pbcs)
+    ∇²ϕ = CellField(FT, arch, grid, pbcs)
 
     interior(ϕ) .= real.(solver.storage)
 
-    fill_halo_regions!(ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(ϕ, arch)
     ∇²!(grid, ϕ.data, ∇²ϕ.data)
 
-    fill_halo_regions!(∇²ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(∇²ϕ, arch)
     interior(∇²ϕ) ≈ RHS_orig
 end
 
 function poisson_pnn_planned_div_free_gpu(FT, Nx, Ny, Nz)
     arch = GPU()
-    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6))
-    fbcs = ChannelBCs()
-    solver = PressureSolver(arch, grid, fbcs)
+    grid = RegularCartesianGrid(FT, size=(Nx, Ny, Nz), length=(1.0, 2.5, 3.6), topology=(Periodic, Bounded, Bounded))
+    pbcs = PressureBoundaryConditions(grid)
+    solver = PressureSolver(arch, grid, pbcs)
 
     RHS = rand(Nx, Ny, Nz)
     RHS .= RHS .- mean(RHS)
@@ -141,10 +139,10 @@ function poisson_pnn_planned_div_free_gpu(FT, Nx, Ny, Nz)
 
     @. ϕ_p = real(storage)
 
-    fill_halo_regions!(ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(ϕ, arch)
     ∇²!(grid, ϕ.data, ∇²ϕ.data)
 
-    fill_halo_regions!(∇²ϕ.data, fbcs, arch, grid)
+    fill_halo_regions!(∇²ϕ, arch)
     interior(∇²ϕ) ≈ RHS_orig
 end
 
@@ -162,8 +160,8 @@ by giving it the source term or right hand side (RHS), which is
     -((\\pi m_z / L_z)^2 + (2\\pi m_y / L_y)^2 + (2\\pi m_x/L_x)^2) \\Psi(x, y, z)``.
 """
 function poisson_ppn_recover_sine_cosine_solution(FT, Nx, Ny, Nz, Lx, Ly, Lz, mx, my, mz)
-    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(Lx, Ly, Lz))
-    solver = PressureSolver(CPU(), grid, HorizontallyPeriodicBCs())
+    grid = RegularCartesianGrid(FT, size=(Nx, Ny, Nz), length=(Lx, Ly, Lz))
+    solver = PressureSolver(CPU(), grid, TracerBoundaryConditions(grid))
 
     xC, yC, zC = grid.xC, grid.yC, grid.zC
     xC = reshape(xC, (Nx, 1, 1))
@@ -181,7 +179,7 @@ function poisson_ppn_recover_sine_cosine_solution(FT, Nx, Ny, Nz, Lx, Ly, Lz, mx
 
     @info "Error (ℓ²-norm), $FT, N=($Nx, $Ny, $Nz), m=($mx, $my, $mz): $error"
 
-    isapprox(ϕ, Ψ.(xC, yC, zC); rtol=5e-2)
+    isapprox(ϕ, Ψ.(xC, yC, zC), rtol=5e-2)
 end
 
 @testset "Pressure solvers" begin

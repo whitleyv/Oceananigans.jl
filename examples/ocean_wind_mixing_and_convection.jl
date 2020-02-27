@@ -61,15 +61,17 @@ nothing # hide
 # at the bottom. Our flux boundary condition for salinity uses a function that calculates
 # the salinity flux in terms of the evaporation rate.
 
-u_bcs = HorizontallyPeriodicBCs(top = BoundaryCondition(Flux, Qᵘ))
+grid = RegularCartesianGrid(size=(Nz, Nz, Nz), length=(Δz*Nz, Δz*Nz, Δz*Nz))
 
-T_bcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Qᵀ),
-                                bottom = BoundaryCondition(Gradient, ∂T∂z))
+u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
+
+T_bcs = TracerBoundaryConditions(grid,    top = BoundaryCondition(Flux, Qᵀ),
+                                       bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 ## Salinity flux: Qˢ = - E * S
 @inline Qˢ(i, j, grid, time, iter, U, C, p) = @inbounds -p.evaporation * C.S[i, j, 1]
 
-S_bcs = HorizontallyPeriodicBCs(top = BoundaryCondition(Flux, Qˢ))
+S_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qˢ))
 nothing # hide
 
 # ## Model instantiation
@@ -84,11 +86,11 @@ nothing # hide
 
 model = Model(
          architecture = CPU(),
-                 grid = RegularCartesianGrid(size=(Nz, Nz, Nz), length=(Δz*Nz, Δz*Nz, Δz*Nz)),
+                 grid = grid,
              coriolis = FPlane(f=f),
              buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=α, β=β)),
               closure = AnisotropicMinimumDissipation(),
-  boundary_conditions = HorizontallyPeriodicSolutionBCs(u=u_bcs, T=T_bcs, S=S_bcs),
+  boundary_conditions = SolutionBoundaryConditions(grid, u=u_bcs, T=T_bcs, S=S_bcs),
            parameters = (evaporation = evaporation,)
 )
 nothing # hide
@@ -128,13 +130,10 @@ set!(model, u=u₀, w=u₀, T=T₀, S=35)
 ## Create a NamedTuple containing all the fields to be outputted.
 fields_to_output = merge(model.velocities, model.tracers, (νₑ=model.diffusivities.νₑ,))
 
-## Instantiate a JLD2OutputWriter to write fields.
+## Instantiate a JLD2OutputWriter to write fields. We will add it to the simulation before
+## running it.
 field_writer = JLD2OutputWriter(model, FieldOutputs(fields_to_output); interval=hour/4,
                                 prefix="ocean_wind_mixing_and_convection", force=true)
-
-## Add the output writer to the models `output_writers`.
-model.output_writers[:fields] = field_writer
-nothing # hide
 
 # ## Running the simulation
 #
@@ -150,14 +149,15 @@ nothing # hide
 wmax = FieldMaximum(abs, model.velocities.w)
 nothing # hide
 
-# Finally, we run the the model in a `while` loop.
+# Finally, we set up and run the the simulation.
+
+simulation = Simulation(model, Δt=wizard, stop_iteration=0, progress_frequency=10)
+simulation.output_writers[:fields] = field_writer
 
 anim = @animate for i in 1:100
-    ## Update the time step associated with `wizard`.
-    update_Δt!(wizard, model)
-
-    ## Time step the model forward
-    walltime = @elapsed time_step!(model, 10, wizard.Δt)
+    ## Run the simulation forward
+    simulation.stop_iteration += 10
+    walltime = @elapsed run!(simulation)
 
     ## Print a progress message
     @printf("i: %04d, t: %s, Δt: %s, wmax = %.1e ms⁻¹, wall time: %s\n",
