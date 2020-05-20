@@ -188,7 +188,7 @@ temperature_boundary_conditions = TracerBoundaryConditions(grid, bottom = Bounda
 This is a [`FieldBoundaryConditions`](@ref) object.
 The `Periodic` horizontal boundary conditions are inferred from `topology(grid)`.
 
-## Specifying boundary conditions in a model
+## Specifying boundary conditions for an `IncompressibleModel`
 
 A named tuple of [`FieldBoundaryConditions`](@ref) objects must be passed to the Model constructor specifying boundary
 conditions on all fields. To, for example, impose non-default boundary conditions on the u-velocity and temperature
