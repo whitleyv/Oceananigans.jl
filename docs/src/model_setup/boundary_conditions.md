@@ -229,7 +229,7 @@ grid = RegularCartesianGrid(topology = (Periodic, Periodic, Bounded),
 u_bcs = UVelocityBoundaryConditions(grid)
 ```
 
-Default are applied within the model constructor as well.
+Defaults are applied within the model constructor as well.
 Adapting the first example in the README, we find,
 
 ```@example
@@ -237,29 +237,5 @@ using Oceananigans # hide
 
 model = IncompressibleModel(grid=RegularCartesianGrid(size=(16, 16, 16), extent=(1, 1, 1)))
 
-@show model.velocities.u.boundary_conditions.z.top
-
-@show model.tracers.T.boundary_conditions.z.top
+@show model.velocities.u.boundary_conditions.z.top model.tracers.T.boundary_conditions.z.top
 ```
-
-## Boundary condition structures
-
-Oceananigans uses a hierarchical structure to expressing boundary conditions.
-
-1. A [`BoundaryCondition`](@ref) is associated with every field, dimension, and endpoint.
-
-2. Boundary conditions specifying the condition at the left and right endpoints are
-   grouped into [`CoordinateBoundaryConditions`](@ref).
-
-3. A set of three `CoordinateBoundaryConditions` specifying the boundary conditions along the x, y, and z dimensions
-   for a single field are grouped into a [`FieldBoundaryConditions`](@ref) named tuple.
-
-4. A set of `FieldBoundaryConditions`, one for each field, are grouped together into a named tuple and passed to the
-   `Model` constructor.
-
-Boundary conditions are defined at model construction time by passing a named tuple of `FieldBoundaryConditions`
-specifying boundary conditions on every field: velocities ($u$, $v$, $w$) and all tracers.
-
-See the sections below for more details. The examples and verification experiments also provide examples for setting up
-many different kinds of boundary conditions.
-
