@@ -95,7 +95,7 @@ struct StokesDrift{
                    WX, 
                    WY, 
                    UT, 
-                   VT
+                   VT,
                    WT
                    } <: AbstractStokesDrift
 
@@ -143,7 +143,7 @@ function StokesDrift(;
                        ∂y_wˢ=addzero,
 
                        ∂t_uˢ=addzero,
-                       ∂t_vˢ=addzero
+                       ∂t_vˢ=addzero,
                        ∂t_wˢ=addzero
                     )
 
@@ -155,9 +155,10 @@ function StokesDrift(;
                        ∂x_wˢ,
                        ∂y_wˢ,
                        ∂t_uˢ,
-                       ∂t_vˢ
+                       ∂t_vˢ,
                        ∂t_wˢ
                       )
+end
 
 const SD = StokesDrift
 
