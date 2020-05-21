@@ -66,8 +66,8 @@ N² = 1e-5 # s⁻²
  g = buoyancy.gravitational_acceleration
 ρᵣ = buoyancy.equation_of_state.reference_density
 
-## Note that b = α ρᵣ g T, and N² ≡ ∂b∂z
-∂T∂z = N² / (α * g * ρᵣ)
+## Note that b = α g T / ρᵣ, and N² ≡ ∂b∂z
+@show ∂T∂z = ρᵣ * N² / (α * g)
 
 bottom_temperature_boundary_condition = BoundaryCondition(Gradient, ∂T∂z)
 
