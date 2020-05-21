@@ -62,11 +62,12 @@ N² = 1e-5 # s⁻²
 # acceleration and the thermal expansion coefficient at 20ᵒC, and 35 psu at atmospheric
 # pressure and thus z=0,
 
-α = SeawaterPolynomials.thermal_expansion(20, 35, 0, buoyancy.equation_of_state)
-g = buoyancy.gravitational_acceleration
+ α = SeawaterPolynomials.thermal_expansion(20, 35, 0, buoyancy.equation_of_state)
+ g = buoyancy.gravitational_acceleration
+ρᵣ = buoyancy.equation_of_state.reference_density
 
-## Note that b = α g T, and N² ≡ ∂b∂z
-∂T∂z = N² / (α * g)
+## Note that b = α ρᵣ g T, and N² ≡ ∂b∂z
+∂T∂z = N² / (α * g * ρᵣ)
 
 bottom_temperature_boundary_condition = BoundaryCondition(Gradient, ∂T∂z)
 
@@ -102,11 +103,19 @@ Qᵇ = α * g * peak_outgoing_flux
 
 @printf "The outward buoyancy flux at midnight is Qᵇ = %.2e m² s⁻³ \n" Qᵇ
 
-# The diurnal variation of outgoing radiation is modeled with a clipped cosine function.
-# The phase of the outgoing radiation is such that t = 0 is high noon, and t = day / 2 is 
-# midnight.
+# ## The diurnal and nocturnal cycles
+#
+# We arbitrarily define t = 0 as night noon.
 
-@inline outgoing_flux(x, y, t, p) = p.peak # max(0, p.peak * cos(2π * (t / p.day - 0.5)))
+""" Returns a function which is a positive half cosine during the day and 0 at night. """
+@inline diurnal_cycle(t, day) = max(0, cos(2π * t / day))
+
+""" Returns a function which is 0 during the day, and a (positive) half cosine at night. """
+@inline nocturnal_cycle(t, day) = max(0, - cos(2π * t / day))
+
+# The diurnal variation of outgoing radiation is thus
+
+@inline outgoing_flux(x, y, t, p) = p.peak * nocturnal_cycle(t, p.day)
 
 # and then wrapped inside a `BoundaryFunction` object,
 
@@ -126,7 +135,7 @@ T_bcs = TracerBoundaryConditions(grid, bottom = bottom_temperature_boundary_cond
 # Next, we specify interior forcing due to solar heating. We set the decay scale of
 # the forcing
 
-insolation_decay_scale = 20 # m
+light_attenuation_scale = 20 # m
 
 # and the solar insolation at the surface, 
 
@@ -139,28 +148,98 @@ surface_solar_temperature_flux = surface_solar_insolation / (reference_density *
 # We model the diurnal variations in solar heating with a clipped cosine. The phase
 # of the solar heating is such that t=0 corresponds to high noon.
 
-@inline solar_flux_divergence(z, t, Qᴵ, λ, day) = Qᴵ / λ * exp(z / λ) * cos(2π * (t / day - 0.0))
+@inline daylight(z, t, λ, day) = exp(z / λ) * diurnal_cycle(t, day)
+
+@inline solar_flux_divergence(z, t, Qᴵ, λ, day) = Qᴵ / λ * daylight(z, t, λ, day)
 
 @inline diurnal_solar_flux_divergence(x, y, z, t, p) =
-    max(0, solar_flux_divergence(z, t, p.surface_flux, p.decay_scale, p.day))
+    max(0, solar_flux_divergence(z, t, p.surface_flux, p.attenuation, p.day))
 
 # Finally, the temperature forcing functions are wrapped in a `SimpleForcing` object,
 
 interior_heating = SimpleForcing(diurnal_solar_flux_divergence,
                                  parameters = (surface_flux = surface_solar_temperature_flux,
-                                                decay_scale = insolation_decay_scale,
+                                                attenuation = light_attenuation_scale,
                                                         day = day))
+
+# ## Biology and chemistry model
+
+struct TracerReaction{F, P, R}
+             forcing :: F
+          parameters :: P
+    reactive_tracers :: R
+
+    function TracerReaction(forcing; reactive_tracers, parameters=nothing) 
+        return new{typeof(forcing), 
+                   typeof(parameters), 
+                   typeof(reactive_tracers)}(forcing, parameters, reactive_tracers)
+    end
+end
+
+@inline function (r::TracerReaction)(i, j, k, grid, clock, state)
+
+    @inbounds reactive_tracers = Tuple(get_property(state.tracers, c)[i, j, k] 
+                                       for c in r.reactive_tracers)
+
+    return r.forcing(
+                     xnode(Cell, i, grid),
+                     ynode(Cell, j, grid),
+                     znode(Cell, k, grid),
+                     clock.time,
+                     reactive_tracers...,
+                     r.parameters
+                    )
+end
+
+@inline γ(c, K) = c / (c + K)
+
+@inline function biomass_rate(x, y, z, t, biomass, NH₄, NO₃, PO₄, p)
+
+    γ_NH₄ = γ(NH₄, p.K_NH₄)
+    γ_NO₃ = γ(NO₃, p.K_NO₃)
+    γ_PO₃ = γ(PO₃, p.K_PO₃)
+
+    return biomass * (
+              p.max_growth_rate * daylight(z, t, p.attenuation, p.day) * min(γ_NH₄ + γ_NO₃, γ_PO₃)
+            - p.respiration_rate
+            - p.mortality_rate
+           )
+end
+
+biochemical_parameters = (
+                          attenuation = light_attenuation_scale,
+                          day = day,
+                          respiration_rate = 1,
+                          mortality_rate = 1,
+                          K_NH₄ = 1,
+                          K_NO₃ = 1,
+                          K_PO₃ = 1,
+                         )
+
+biomass_forcing = TracerReaction(
+                                 biomass_rate,
+                                       parameters = biochemical_parameters,
+                                 reactive_tracers = (:biomass, :NH₄, :NO₃, :PO₃)
+                                )
 
 # ## Model instantiation
 # 
 # We specify the diffusivity that, through trial and error, was determined to produce 
 # a solution "without too much grid-scale noise".
+#
+tracer_names = (
+                :T,                  # temperature
+                :biomass,            # phytoplankton biomass
+                :inorganic_carbon,   # dissolved inorganic carbon
+                :organic_carbon,     # dissolved organic carbon
+                :particulate_carbon, # particular (not dissolved) carbon
+               )
 
 model = IncompressibleModel(
                                    architecture = CPU(),
                                            grid = grid,
                                        coriolis = nothing,
-                                        tracers = (:T,),
+                                        tracers = :T, #tracer_names,
                                        buoyancy = buoyancy,
                                         closure = ConstantIsotropicDiffusivity(ν=1e-3, κ=1e-3),
                             boundary_conditions = (T=T_bcs,),
