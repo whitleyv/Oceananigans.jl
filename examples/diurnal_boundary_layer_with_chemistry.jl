@@ -24,6 +24,8 @@ using Random, Statistics, Printf, Plots, JLD2
 using Oceananigans, Oceananigans.OutputWriters, Oceananigans.Diagnostics, Oceananigans.Utils,
       Oceananigans.BoundaryConditions, Oceananigans.Grids, Oceananigans.Forcing
 
+using SeawaterPolynomials
+
 # ## The domain
 #
 # Our domain is square, two-dimensional, horizontally-periodic, and deep enough to support 
@@ -31,18 +33,19 @@ using Oceananigans, Oceananigans.OutputWriters, Oceananigans.Diagnostics, Oceana
 # stratified interior below,
 
 grid = RegularCartesianGrid(
-                                size = (256, 1, 192), 
+                                size = (128, 1, 96), 
                               extent = (128, 1, 96), # meters
                             topology = (Periodic, Periodic, Bounded),
                            )
 
 # ## Buoyancy and equation of state
 #
-# We use the default gravitational acceleration and thermal expansion associated
-# with SeawaterBuoyancy and LinearEquationOfState. We prescribe salinity to be constant.
+# We use the default gravitational acceleration and the TEOS10 equation of state.
+# We prescribe salinity to be constant, which means we don't need to calculate its
+# distribution as we run the model.
 
 buoyancy = SeawaterBuoyancy(
-                            equation_of_state = LinearEquationOfState(), 
+                            equation_of_state = SeawaterPolynomials.TEOS10EquationOfState(),
                             constant_salinity = 35.0 # psu
                            )
 
@@ -56,9 +59,10 @@ buoyancy = SeawaterBuoyancy(
 N² = 1e-5 # s⁻²
 
 # We derive the temperature gradient from the buoyancy gradient using gravitational
-# acceleraiton and the thermal expansion coefficient, 
+# acceleration and the thermal expansion coefficient at 20ᵒC, and 35 psu at atmospheric
+# pressure and thus z=0,
 
-α = buoyancy.equation_of_state.α
+α = SeawaterPolynomials.thermal_expansion(20, 35, 0, buoyancy.equation_of_state)
 g = buoyancy.gravitational_acceleration
 
 ## Note that b = α g T, and N² ≡ ∂b∂z
@@ -75,22 +79,34 @@ bottom_temperature_boundary_condition = BoundaryCondition(Gradient, ∂T∂z)
 peak_outgoing_radiation = 300 # Watts / m²
 
 # The temperature flux associated with outgoing radiation of heat depends on 
-# the reference density and heat capacity, which are chosen to be close to 
-# average values close to the ocean surface:
+# the reference density and heat capacity. For conservative temperature
+# described by TEOS10, the heat_capacity is
 
-reference_density = 1035 # kg m⁻³
-    heat_capacity = 3991 # J / kg / ᵒC
+heat_capacity = 3991 # J / kg / ᵒC
 
-## Definition of temperature: internal_energy = density * heat_capacity * temperature
+# The reference density is also defined by TEOS10,
+
+reference_density = buoyancy.equation_of_state.reference_density # kg m⁻³
+
+# We can then calculate the outgoing temperature flux using the definition
+#
+#   $ \rm{internal_energy} = \rho * c_P * \Theta $,
+#
+# where $\Theta$ is Oceananigans' `T`.
+
 peak_outgoing_flux = peak_outgoing_radiation / (reference_density * heat_capacity)
 
-# For reference, we display the buoyancy flux at the top due to cooling:
+# The buoyancy flux at the top during peak outward radiation is, roughly,
 
-@show Qᵇ = α * g * peak_outgoing_flux
+Qᵇ = α * g * peak_outgoing_flux
 
-# The diurnal variation of outgoing radiation is modeled with a clipped cosine function,
+@printf "The outward buoyancy flux at midnight is Qᵇ = %.2e m² s⁻³ \n" Qᵇ
 
-@inline outgoing_flux(x, y, t, p) = max(0, p.peak * cos(2π * (t / p.day - 0.5)))
+# The diurnal variation of outgoing radiation is modeled with a clipped cosine function.
+# The phase of the outgoing radiation is such that t = 0 is high noon, and t = day / 2 is 
+# midnight.
+
+@inline outgoing_flux(x, y, t, p) = p.peak # max(0, p.peak * cos(2π * (t / p.day - 0.5)))
 
 # and then wrapped inside a `BoundaryFunction` object,
 
@@ -114,13 +130,14 @@ insolation_decay_scale = 20 # m
 
 # and the solar insolation at the surface, 
 
-surface_solar_insolation = 300 # Watts / m²
+surface_solar_insolation = 600 # Watts / m²
 
 # which determines the surface temperature flux due to solar insolation,
 
 surface_solar_temperature_flux = surface_solar_insolation / (reference_density * heat_capacity)
 
-# We model the diurnal variations in solar heating with a clipped cosine,
+# We model the diurnal variations in solar heating with a clipped cosine. The phase
+# of the solar heating is such that t=0 corresponds to high noon.
 
 @inline solar_flux_divergence(z, t, Qᴵ, λ, day) = Qᴵ / λ * exp(z / λ) * cos(2π * (t / day - 0.0))
 
@@ -145,7 +162,7 @@ model = IncompressibleModel(
                                        coriolis = nothing,
                                         tracers = (:T,),
                                        buoyancy = buoyancy,
-                                        closure = ConstantIsotropicDiffusivity(ν=2e-4, κ=2e-4),
+                                        closure = ConstantIsotropicDiffusivity(ν=1e-3, κ=1e-3),
                             boundary_conditions = (T=T_bcs,),
                                         forcing = ModelForcing(T=interior_heating),
                            )
@@ -205,7 +222,7 @@ simulation = Simulation(model, progress_frequency = 100,
 # We add a field writer so we can make a movie from the output afterwards
 
 field_writer = JLD2OutputWriter(model, FieldOutputs(merge(model.velocities, model.tracers)),
-                                interval = 1minute,
+                                interval = 2minute,
                                   prefix = "diurnal_boundary_layer_with_biogeochemistry",
                                    force = true)
 
@@ -253,7 +270,7 @@ anim = @animate for (i, iter) in enumerate(iterations)
     w_plot = heatmap(x, zw, w'; c=:balance, clims=(-wlim, wlim),  kwargs... ) #levels=wlevels, kwargs...)
     θ_plot = heatmap(x, zθ, θ'; c=:thermal, clims=(θlim⁻, θlim⁺), kwargs... ) #levels=θlevels, kwargs...)
 
-    plot(w_plot, θ_plot, layout=(1, 2), size=(2000, 600))
+    plot(w_plot, θ_plot, layout=(1, 2), size=(2000, 800))
 end
 
 close(file)
