@@ -26,26 +26,25 @@ using Oceananigans, Oceananigans.OutputWriters, Oceananigans.Diagnostics, Oceana
 
 # ## The domain
 #
-# We use a square, two-dimensional domain with vertical and horizontal
-# resolution
+# Our domain is square, two-dimensional, horizontally-periodic, and deep enough to support 
+# a diurnal boundary layer relatively unaffected by internal wave propagation into the 
+# stratified interior below,
 
-Nx = 256  # Number of grid points in x
-Nz = 192  # Number of grid points in z
-Δx = 0.5  # Grid spacing in x (m)
-Δz = 0.5  # Grid spacing in z (m)
-
-# We can then make the grid,
-
-grid = RegularCartesianGrid(size = (Nx, 1, Nz), extent = (Δx*Nx, 1, Δz*Nz))
-
-# which by default is horizontally-periodic and bounded in the vertical.
+grid = RegularCartesianGrid(
+                                size = (256, 1, 192), 
+                              extent = (128, 1, 96), # meters
+                            topology = (Periodic, Periodic, Bounded),
+                           )
 
 # ## Buoyancy and equation of state
 #
 # We use the default gravitational acceleration and thermal expansion associated
 # with SeawaterBuoyancy and LinearEquationOfState. We prescribe salinity to be constant.
 
-buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(), constant_salinity=35.0)
+buoyancy = SeawaterBuoyancy(
+                            equation_of_state = LinearEquationOfState(), 
+                            constant_salinity = 35.0 # psu
+                           )
 
 # ## Boundary conditions
 #
@@ -62,7 +61,10 @@ N² = 1e-5 # s⁻²
 α = buoyancy.equation_of_state.α
 g = buoyancy.gravitational_acceleration
 
+## Note that b = α g T, and N² ≡ ∂b∂z
 ∂T∂z = N² / (α * g)
+
+bottom_temperature_boundary_condition = BoundaryCondition(Gradient, ∂T∂z)
 
 # ### Top boundary condition
 #
@@ -73,31 +75,35 @@ g = buoyancy.gravitational_acceleration
 peak_outgoing_radiation = 300 # Watts / m²
 
 # The temperature flux associated with outgoing radiation of heat depends on 
-# the reference density and heat capacity,
+# the reference density and heat capacity, which are chosen to be close to 
+# average values close to the ocean surface:
 
 reference_density = 1035 # kg m⁻³
     heat_capacity = 3991 # J / kg / ᵒC
 
-peak_temperature_flux = peak_outgoing_radiation / (reference_density * heat_capacity)
+## Definition of temperature: internal_energy = density * heat_capacity * temperature
+peak_outgoing_flux = peak_outgoing_radiation / (reference_density * heat_capacity)
 
-# For reference, we also calculate the buoyancy flux at the top due to cooling.
+# For reference, we display the buoyancy flux at the top due to cooling:
 
-@show Qᵇ = α * g * peak_temperature_flux
+@show Qᵇ = α * g * peak_outgoing_flux
 
 # The diurnal variation of outgoing radiation is modeled with a clipped cosine function,
 
 @inline outgoing_flux(x, y, t, p) = max(0, p.peak * cos(2π * (t / p.day - 0.5)))
 
-outgoing_flux_bc = TracerBoundaryCondition(Flux, :z, outgoing_flux,
-                                           (day=day, peak=peak_temperature_flux))
+# and then wrapped inside a `BoundaryFunction` object,
+
+surface_temperature_boundary_condition = 
+    TracerBoundaryCondition(Flux, :z, outgoing_flux, (day=day, peak=peak_outgoing_flux))
 
 # To summarize, the temperature boundary condition are:
 #
-# * Bottom: stable temperature gradient
-# * Top: diurnally varying flux due to outgoing radiation at night
+# * Bottom at z = -Lz: stable temperature gradient
+# * Top at z = 0: diurnally varying flux due to outgoing radiation at night
 
-T_bcs = TracerBoundaryConditions(grid, bottom = BoundaryCondition(Gradient, ∂T∂z),
-                                          top = outgoing_flux_bc)
+T_bcs = TracerBoundaryConditions(grid, bottom = bottom_temperature_boundary_condition,
+                                          top = surface_temperature_boundary_condition)
 
 # ## Interior forcing due to solar heating
 #
@@ -129,6 +135,9 @@ interior_heating = SimpleForcing(diurnal_solar_flux_divergence,
                                                         day = day))
 
 # ## Model instantiation
+# 
+# We specify the diffusivity that, through trial and error, was determined to produce 
+# a solution "without too much grid-scale noise".
 
 model = IncompressibleModel(
                                    architecture = CPU(),
@@ -136,54 +145,65 @@ model = IncompressibleModel(
                                        coriolis = nothing,
                                         tracers = (:T,),
                                        buoyancy = buoyancy,
-                                        closure = ConstantIsotropicDiffusivity(ν=1e-4, κ=1e-4),
+                                        closure = ConstantIsotropicDiffusivity(ν=2e-4, κ=2e-4),
                             boundary_conditions = (T=T_bcs,),
                                         forcing = ModelForcing(T=interior_heating),
                            )
-nothing # hide
 
-## Random noise concentrated at the top
-Ξ(z) = randn() * exp(z / (8 * Δz))
+# ## The initial condition
+#
+# Our initial condition is a stably stratified temperature gradient with a bit
+# of Gaussian-distributed random noise superimposed,
 
-## Temperature initial condition: a stable density tradient with random noise superposed.
-T₀(x, y, z) = 20 + ∂T∂z * z + ∂T∂z * model.grid.Lz * 1e-4 * Ξ(z)
+T₀(x, y, z) = (
+               20 + ∂T∂z * z # constant plus linear gradient
+                  + ∂T∂z * grid.Lz * 1e-4 * randn() * exp(z / (8 * grid.Δz)) # noise
+               )
 
 set!(model, T=T₀)
 
-# ## Running the simulation
+# ## Build the Simulation
 #
 # To run the simulation, we instantiate a `TimeStepWizard` to ensure stable time-stepping
 # with a Courant-Freidrichs-Lewy (CFL) number of 0.2.
 
 wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.1, max_Δt=5.0)
-nothing # hide
 
-# A diagnostic that returns the maximum absolute value of `w` by calling
-# `wmax(model)`:
+# We also make a diagnostic that returns the maximum absolute value of `w` by calling
+# `wmax(model)`, for convenient logging:
 
 wmax = FieldMaximum(abs, model.velocities.w)
-nothing # hide
 
-# # Running the simulation
-#
 # We set up a function to print a progress message, and then run the simulation.
 
-function progress_message(simulation)
+wall_clock = time_ns()
+
+function print_message(simulation)
     model = simulation.model
 
-    @printf("i: %04d, t: %s, Δt: %s, wmax = %.1e ms⁻¹\n",
-            model.clock.iteration, prettytime(model.clock.time), prettytime(wizard.Δt),
-            wmax(model))
+    msg = @sprintf("i: %04d, t: %s, Δt: %s, wmax = %.1e ms⁻¹, wall time: %s\n", 
+                   model.clock.iteration, 
+                   prettytime(model.clock.time),
+                   prettytime(wizard.Δt), 
+                   wmax(model), 
+                   prettytime(1e-9 * (time_ns()-wall_clock))
+                  )
+
+    @info msg
 
     return nothing
 end
 
+# We instantiate the simulation, setting the stop time to 48 hours and asking for
+# a progress update every 100 iterations:
+
 simulation = Simulation(model, progress_frequency = 100,
                                         stop_time = 48hour,
                                                Δt = wizard, 
-                                         progress = progress_message)
+                                         progress = print_message)
                       
-## Add field writer
+# We add a field writer so we can make a movie from the output afterwards
+
 field_writer = JLD2OutputWriter(model, FieldOutputs(merge(model.velocities, model.tracers)),
                                 interval = 1minute,
                                   prefix = "diurnal_boundary_layer_with_biogeochemistry",
@@ -191,10 +211,11 @@ field_writer = JLD2OutputWriter(model, FieldOutputs(merge(model.velocities, mode
 
 simulation.output_writers[:fields] = field_writer
 
-## Run
+# ## Run the simulation (this takes some time)
+
 run!(simulation)
 
-# # Visualize the results
+# ## Visualize the results
 #
 # There's little point to running a fluids simulation if you don't make a pretty movie.
 # Here we use Plots.jl to visualize the evolution of vertical velocity and temperature.
@@ -223,8 +244,8 @@ anim = @animate for (i, iter) in enumerate(iterations)
     wlevels = range(-wlim, stop=wlim, length=10)
     wlevels = wmax > wlim ? vcat([-wmax], wlevels, [wmax]) : wlevels
 
-    θlim⁺ = 20.1
-    θlim⁻ = 19.8
+    θlim⁺ = 20.00
+    θlim⁻ = 19.75
     θmax = maximum(θ)
     θlevels = range(θlim⁻, stop=θlim⁺, length=10)
     θlevels = θmax > θlim⁺ ? vcat([0], θlevels, [θmax]) : vcat([0], θlevels)
