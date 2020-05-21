@@ -5,6 +5,8 @@
 
 using Oceananigans, Oceananigans.Grids, Plots, Printf
 
+pyplot()
+
 # ## Numerical, domain, and internal wave parameters
 #
 # First, we pick some numerical and physical parameters for our model
@@ -90,18 +92,21 @@ simulation = Simulation(model, Δt = 0.001 * 2π/ω, stop_iteration = 0,
 
 anim = @animate for i=0:100
     x, z = xnodes(Cell, model.grid)[:], znodes(Face, model.grid)[:]
-    w = model.velocities.w
+
+    w = interior(model.velocities.w)[:, 1, :]
     
-    contourf(x, z, w.data[1:Nx, 1, 1:Nx+1]',
-             title=@sprintf("ωt = %.2f", ω*model.clock.time),
-             levels=range(-1e-8, stop=1e-8, length=10),
-             clims=(-1e-8, 1e-8),
-             xlabel="x", ylabel="z",
-             xlims=(0, Lx), ylims=(-Lx, 0),
-             linewidth=0,
-             c=:balance,
-             legend=false,
-             aspectratio=:equal)
+    contourf(x, z, w',
+                   title = @sprintf("ω t = %.2f", ω * model.clock.time),
+                  levels = range(-1e-8, stop=1e-8, length=10),
+                   clims = (-1e-8, 1e-8),
+                  xlabel = "x",
+                  ylabel = "z",
+                   xlims = (0, Lx),
+                   ylims = (-Lx, 0),
+               linecolor = :transparent,
+                   color = :balance,
+                  legend = false,
+             aspectratio = :equal)
             
     simulation.stop_iteration += 20
     run!(simulation)
