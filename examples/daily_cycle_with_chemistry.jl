@@ -33,7 +33,7 @@ using SeawaterPolynomials
 # stratified interior below,
 
 grid = RegularCartesianGrid(
-                                size = (128, 1, 96), 
+                                size = (128, 1, 96),
                               extent = (128, 1, 96), # meters
                             topology = (Periodic, Periodic, Bounded),
                            )
@@ -191,16 +191,10 @@ end
                     )
 end
 
-@inline γ(c, K) = c / (c + K)
-
-@inline function biomass_rate(x, y, z, t, biomass, NH₄, NO₃, PO₄, p)
-
-    γ_NH₄ = γ(NH₄, p.K_NH₄)
-    γ_NO₃ = γ(NO₃, p.K_NO₃)
-    γ_PO₃ = γ(PO₃, p.K_PO₃)
+@inline function biomass_rate(x, y, z, t, biomass, p)
 
     return biomass * (
-              p.max_growth_rate * daylight(z, t, p.attenuation, p.day) * min(γ_NH₄ + γ_NO₃, γ_PO₃)
+              p.max_growth_rate * daylight(z, t, p.attenuation, p.day)
             - p.respiration_rate
             - p.mortality_rate
            )
@@ -209,18 +203,24 @@ end
 biochemical_parameters = (
                           attenuation = light_attenuation_scale,
                           day = day,
-                          respiration_rate = 1,
-                          mortality_rate = 1,
-                          K_NH₄ = 1,
-                          K_NO₃ = 1,
-                          K_PO₃ = 1,
+                                              max_growth_rate = 1.0 / day,
+                                             respiration_rate = 0.3 / day,
+                                               mortality_rate = 0.6 / day,
+                              dissolved_remineralization_rate = 0.1 / day,
+                            particulate_remineralization_rate = 0.1 / day,
+                               fractional_biomass_dissolution = 0.5,
                          )
 
 biomass_forcing = TracerReaction(
                                  biomass_rate,
-                                       parameters = biochemical_parameters,
-                                 reactive_tracers = (:biomass, :NH₄, :NO₃, :PO₃)
+                                 parameters = biochemical_parameters,
+                                 reactive_tracers = (:biomass,)
                                 )
+
+@inline surface_inorganic_carbon_flux(i, j, grid, clock, state) = 1e4 / day
+    #@inbounds 1.0 / day * state.biomass[i, j, grid.Nz]
+
+dic_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, surface_inorganic_carbon_flux))
 
 # ## Model instantiation
 # 
@@ -251,12 +251,22 @@ model = IncompressibleModel(
 # Our initial condition is a stably stratified temperature gradient with a bit
 # of Gaussian-distributed random noise superimposed,
 
-T₀(x, y, z) = (
+initial_temperature(x, y, z) = (
                20 + ∂T∂z * z # constant plus linear gradient
                   + ∂T∂z * grid.Lz * 1e-4 * randn() * exp(z / (8 * grid.Δz)) # noise
                )
 
-set!(model, T=T₀)
+           initial_biomass(x, y, z) = 1.0 # mmol / m³
+  initial_inorganic_carbon(x, y, z) = 2.0 # mmol / m³
+    initial_organic_carbon(x, y, z) = 5.0 # mmol / m³
+initial_particulate_carbon(x, y, z) = 1.0 # mmol / m³
+
+set!(model, T = initial_temperature, 
+            biomass = initial_biomass,
+            inorganic_carbon = initial_inorganic_carbon,
+            organic_carbon = initial_organic_carbon,
+            particulate_carbon = initial_particulate_carbon,
+           )
 
 # ## Build the Simulation
 #
