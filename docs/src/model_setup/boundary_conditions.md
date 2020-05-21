@@ -48,8 +48,8 @@ To specify a constant stress on a boundary,
 ```@example
 using Oceananigans # hide
 
-reference_density = 1027  # Reference density [kg/m³]
-surface_stress = 0.08  # Wind stress [N/m²]
+reference_density = 1027  # kg / m³
+surface_stress = 0.08     # N / m²
 
 stress_bc = BoundaryCondition(Flux, surface_stress / reference_density)
 ```
@@ -65,7 +65,7 @@ To specify a constant buoyancy gradient, write
 ```@example
 using Oceananigans # hide
 
-buoyancy_gradient = 1e-5 # Buoyancy gradient, the square of the buoyancy frequency [s⁻²]
+buoyancy_gradient = 1e-5 # aka the square of the buoyancy frequency [s⁻²]
 
 buoyancy_bc = BoundaryCondition(Gradient, buoyancy_gradient)
 ```
@@ -79,15 +79,15 @@ using Oceananigans # hide
 
 Nx = Ny = 16  # Number of grid points.
 
-reference_density = 1027  # Reference density [kg/m³]
-heat_capacity = 4000  # Heat capacity of water at constant pressure [J/kg/K]
+reference_density = 1027  # kg / m³
+heat_capacity = 4000  # (at constant pressure) [J / kg / K]
 
-Q = randn(Nx, Ny) ./ (reference_density * heat_capacity)
+cooling = randn(Nx, Ny) ./ (reference_density * heat_capacity)
 
-noisy_bc = BoundaryCondition(Flux, Q)
+noisy_bc = BoundaryCondition(Flux, cooling)
 ```
 
-When running on the GPU, `Q` must be converted to a `CuArray`.
+When running on the GPU, `heat_flux` must be converted to a `CuArray`.
 
 #### Flux that is Gaussian in space but sinusoidal in time
 
@@ -96,7 +96,7 @@ using Oceananigans, Oceananigans.Grids # hide
 
 @inline Q(i, j, grid, clock, state) = @inbounds exp(-(xC(i, grid)^2 + yC(j, grid)^2)) * sin(2π * model.clock.t)
 
-localized_heating_bc = BoundaryCondition(Flux, Q)
+localized_cooling_bc = BoundaryCondition(Flux, Q)
 ```
 
 `Oceananigans` also provides a wrapper for using simpler function signatures that are closer to the
@@ -107,7 +107,7 @@ using Oceananigans, Oceananigans.BoundaryConditions # hide
 
 @inline Q(x, y, t) = @inbounds exp(-(x^2 + y^2)) * sin(2π * t)
 
-localized_heating_bc = TracerBoundaryCondition(Flux, :z, Q)
+localized_cooling_bc = TracerBoundaryCondition(Flux, :z, Q)
 ```
 
 Constructors with the same syntax as `TracerBoundaryCondition` for use with `BoundaryFunction`s,
@@ -143,7 +143,7 @@ and therfore accept one of the three boundary conditions above when `z` is `Boun
 Velocity components that are normal to a boundary (for example, the vertical velocity `w` with respect to the
 `z` direction) accept only one boundary condition:
 
-* [`No-penetration`](@ref NoPenetration)
+* [`NoPenetration`](@ref NoPenetration)
 
 Finally, directions that are `Periodic` have the boundary condition
 
@@ -154,16 +154,17 @@ are inferred during model construction from `topology(grid)`.
 
 ### Boundary condition functions
 
-Oceananigans supports boundary condition numeric constants, arrays, and functions.
+Oceananigans supports boundary conditions that are numeric constants, two-dimensinoal arrays, and functions.
 The function signature for a z boundary condition is
 
 ```julia
 func(i, j, grid, clock, state)
 ```
 
-where `i, j` is the grid index, `grid` is `model.grid`, `clock` is `model.clock`, which contains `model.clock.time`, 
+where `i, j` are the `x, y` indices, `grid` is `model.grid`, `clock` is `model.clock`, which contains `model.clock.time`, 
 and `model.clock.iteration`, and `state` contains the `state.velocities` components and `state.tracers`.
-The signature is similar for x and y boundary conditions expect that `i, j` is replaced with `j, k` and `i, k` respectively.
+The expected signature for `x` and `y` boundary conditions is identical, except that `i, j`
+correspond to `j, k` (`y, z` for `x` boundaries) and `i, k` (`x, z` for `y` boundaries).
 
 ## Building boundary conditions for a field
 
@@ -172,7 +173,7 @@ Once all of the non-default boundary conditions for a field are determined, we m
 to collects all six of the field's boundary conditions. Under the hood, this object is called `FieldBoundaryConditions`.
 
 To create a set of horizontally periodic boundary conditions with non-default top and bottom boundary conditions for
-a tracer field, we write
+a tracer field, write
 
 ```@example
 using Oceananigans # hide
@@ -185,13 +186,13 @@ temperature_boundary_conditions = TracerBoundaryConditions(grid, bottom = Bounda
                                                                     top = BoundaryCondition(Value, 20))
 ```
 
-This is a [`FieldBoundaryConditions`](@ref) object.
+The display above shows a [`FieldBoundaryConditions`](@ref) object.
 The `Periodic` horizontal boundary conditions are inferred from `topology(grid)`.
 
 ## Specifying boundary conditions for an `IncompressibleModel`
 
-A named tuple of [`FieldBoundaryConditions`](@ref) objects must be passed to the Model constructor specifying boundary
-conditions on all fields. To, for example, impose non-default boundary conditions on the u-velocity and temperature
+Boundary conditions on the fields of a model are specified through the `boundary_conditions` keyword
+argument in the `IncompressibleModel` constructor. For example,
 
 ```@example
 using Oceananigans # hide
@@ -206,15 +207,50 @@ u_bcs = UVelocityBoundaryConditions(grid, bottom = BoundaryCondition(Value, -0.1
 T_bcs = TracerBoundaryConditions(grid, bottom = BoundaryCondition(Gradient, 0.01),
                                           top = BoundaryCondition(Value, 20))
 
-model = IncompressibleModel(grid=grid, boundary_conditions=(u=u_bcs, T=T_bcs))
+model = IncompressibleModel(grid=grid, tracers=(:T, :S), boundary_conditions=(u=u_bcs, T=T_bcs))
 ```
+
+imposes non-default boundary condition on the `u` velocity component and tracer `T`.
 
 ## Default boundary conditions
 
-As mentioned above, `Periodic` boundary conditions apply in periodic directions, while `NoPenetration` boundary
-conditions are applied to a velocity component normal to a `Bounded` direction.
+### Periodic directions
 
-In addition to these, a zero flux or "no flux" boundary condition is applied to tracers and tangential velocity 
+`Periodic` boundary conditions apply in periodic directions.
+
+```@example
+using Oceananigans # hide
+
+grid = RegularCartesianGrid(topology = (Periodic, Periodic, Bounded),
+                                size = (16, 16, 16),
+                              extent = (1, 1, 1))
+                            
+w_bcs = WVelocityBoundaryConditions(grid)
+
+@show w_bcs.x.left
+```
+
+### Bounded directions
+
+#### Normal component of the velocity field 
+
+A `NoPenetration` boundary condition is applied to a velocity component normal to a `Bounded` direction.
+
+```@example
+using Oceananigans # hide
+
+grid = RegularCartesianGrid(topology = (Periodic, Periodic, Bounded),
+                                size = (16, 16, 16),
+                              extent = (1, 1, 1))
+                            
+w_bcs = WVelocityBoundaryConditions(grid)
+
+@show w_bcs.z.top
+```
+
+#### Tracers and tangential components of the velocity field
+
+A zero flux or "no flux" boundary condition is applied to tracers and tangential velocity 
 components in `Bounded` directions by default.
 
 For example,
@@ -229,7 +265,7 @@ grid = RegularCartesianGrid(topology = (Periodic, Periodic, Bounded),
 u_bcs = UVelocityBoundaryConditions(grid)
 ```
 
-Defaults are applied within the model constructor as well.
+Defaults are applied within the model constructor.
 Adapting the first example in the README, we find,
 
 ```@example
@@ -237,5 +273,5 @@ using Oceananigans # hide
 
 model = IncompressibleModel(grid=RegularCartesianGrid(size=(16, 16, 16), extent=(1, 1, 1)))
 
-@show model.velocities.u.boundary_conditions.z.top model.tracers.T.boundary_conditions.z.top
+@show model.velocities.u.boundary_conditions.z.bottom
 ```
