@@ -1,9 +1,10 @@
 using KernelAbstractions
-using Oceananigans.Utils: work_layout
-import Oceananigans.Diagnostics: get_kernel
 
-import Oceananigans.Fields: location, total_size
+using Oceananigans.Utils: work_layout
 using Oceananigans.Diagnostics: dims_to_result_size
+
+import Oceananigans.Diagnostics: get_kernel
+import Oceananigans.Fields: location, total_size
 
 """
     Computation{T, R, O, G}
@@ -91,14 +92,22 @@ function Average(op::AbstractOperation, result; dims, kwargs...)
 end
 
 """
-    Average(op::AbstractOperation, model; dims, kwargs...)
+    Average(op::AbstractOperation; dims, kwargs...)
 
-Returns the representation of an `Average` over the operation `op`, using
-`model.pressures.pHY′` as a temporary array to store the result of `operation` computed on
+Returns the representation of an `Average` over the operation `op`, using a newly
+constructed field as a temporary array to store the result of `op` computed on
 `op.grid`.
 """
-Average(op::AbstractOperation, model::AbstractModel; dims, kwargs...) =
-    Average(op, model.pressures.pHY′; dims=dims, kwargs...)
+function Average(op::AbstractOperation; dims, kwargs...)
+    X, Y, Z = location(op)
+
+    arg1 = args(op)[1]  # There will always be at least one arg.
+    arch = architecture(arg1)
+
+    intermediate_field = Field(X, Y, Z, arch, op.grid)
+
+    return Average(op, intermediate_field; dims=dims, kwargs...)
+end
 
 """
     Average(field::Field; dims, iteration_interval=nothing, time_interval=nothing, return_type=Array)

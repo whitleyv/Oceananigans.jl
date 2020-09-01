@@ -22,7 +22,7 @@ using Oceananigans.Models: AbstractModel
 using Oceananigans.Diagnostics: Average, normalize_sum!
 
 import Oceananigans.Architectures: architecture
-import Oceananigans.Fields: data
+import Oceananigans.Fields: data, architecture
 import Oceananigans.Diagnostics: run_diagnostic
 
 #####
@@ -54,10 +54,16 @@ include("binary_operations.jl")
 include("multiary_operations.jl")
 include("derivatives.jl")
 
+args(op::UnaryOperation) = (op.arg,)
+args(op::BinaryOperation) = (op.a, op.b)
+args(op::MultiaryOperation) = op.args
+
 include("computations.jl")
 include("show_abstract_operations.jl")
 
-# Make some operators!
+#####
+##### Make some operators!
+#####
 
 # Some unaries:
 import Base: sqrt, sin, cos, exp, tanh, -, +, /, ^, *
