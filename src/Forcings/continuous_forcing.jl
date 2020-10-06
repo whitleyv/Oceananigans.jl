@@ -145,7 +145,7 @@ end
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object with parameters. """
 @inline function forcing_func_arguments(i, j, k, grid,
-                                        model_fields::M
+                                        model_fields::M,
                                         parameters,
                                         ℑ::I,
                                         idx::NTuple{N}) where {I, N, M}
