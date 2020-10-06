@@ -115,14 +115,14 @@ end
 ##### Functions for calling ContinuousForcing in a time-stepping kernel
 #####
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ, idx::NTuple{1}) =
+@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1}, idx::NTuple{1}) where I1 =
     @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),)
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ, idx::NTuple{2}) =
+@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1, I2}, idx::NTuple{2}) where {I1, I2} =
     @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),
                ℑ[2](i, j, k, grid, model_fields[idx[2]]))
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ, idx::NTuple{3}) =
+@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1, I2, I3}, idx::NTuple{3}) where {I1, I2, I3} =
     @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),
                ℑ[2](i, j, k, grid, model_fields[idx[2]]),
                ℑ[3](i, j, k, grid, model_fields[idx[3]]))
