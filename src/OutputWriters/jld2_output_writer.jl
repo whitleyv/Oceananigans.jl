@@ -18,6 +18,7 @@ mutable struct JLD2OutputWriter{I, T, O, FS, D, IF, IN, KW} <: AbstractOutputWri
              including :: IN
               previous :: Float64
                   part :: Int
+          output_index :: Int
           max_filesize :: Float64
                  force :: Bool
                verbose :: Bool
@@ -36,8 +37,8 @@ noinit(args...) = nothing
                                               max_filesize = Inf,
                                                      force = false,
                                                       init = noinit,
-                                                 including = [:grid, :coriolis, :buoyancy, :closure],
-                                                   verbose = false,
+                                                 including = [:advection, :coriolis, :buoyancy, :closure],
+                                                   verbose = true,
                                                       part = 1,
                                                 array_type = Array{Float32},
                                                    jld2_kw = Dict{Symbol, Any}())
@@ -48,7 +49,9 @@ in `outputs` to a JLD2 file.
 The argument `outputs` may be a `Dict` or `NamedTuple`. The keys of `outputs` are symbols or
 strings that "name" output data. The values of `outputs` are either `AbstractField`s, objects that
 are called with the signature `output(model)`, or `WindowedTimeAverage`s of `AbstractFields`s,
-functions, or callable objects.
+functions, or callable objects. Output is saved in a JLD2 file at the address `output/output_index/name`
+for each item in `outputs`, along with `output/output_index/model.clock.time` and
+`output/output_index/model.clock.iteration`, where `output_index` is `0, 1, 2, ...`.
 
 Keyword arguments
 =================
@@ -101,12 +104,12 @@ Keyword arguments
               Default: `noinit(args...) = nothing`.
     
     - `including`: List of model properties to save with every file.
-                   Default: `[:grid, :coriolis, :buoyancy, :closure]`
+                   Default: `[:advection, :coriolis, :buoyancy, :closure]`
 
     ## Miscellaneous keywords
 
     - `verbose`: Log what the output writer is doing with statistics on compute/write times and file sizes.
-                 Default: `false`.
+                 Default: `true`.
     
     - `part`: The starting part number used if `max_filesize` is finite.
               Default: 1.
@@ -124,9 +127,10 @@ function JLD2OutputWriter(model, outputs; prefix,
                                                    max_filesize = Inf,
                                                           force = false,
                                                            init = noinit,
-                                                      including = [:grid, :coriolis, :buoyancy, :closure],
-                                                        verbose = false,
+                                                      including = [:advection, :coriolis, :buoyancy, :closure],
+                                                        verbose = true,
                                                            part = 1,
+                                                   output_index = 0,
                                                         jld2_kw = Dict{Symbol, Any}())
 
     validate_intervals(iteration_interval, time_interval)
@@ -154,10 +158,7 @@ function JLD2OutputWriter(model, outputs; prefix,
     filepath = joinpath(dir, prefix * ".jld2")
     force && isfile(filepath) && rm(filepath, force=true)
 
-    jldopen(filepath, "a+"; jld2_kw...) do file
-        init(file, model)
-        saveproperties!(file, model, including)
-    end
+    initialize_new_file!(filepath, model, outputs, including, jld2_kw)
 
     return JLD2OutputWriter(filepath,
                             outputs,
@@ -169,12 +170,60 @@ function JLD2OutputWriter(model, outputs; prefix,
                             including,
                             0.0,
                             part,
+                            output_index,
                             max_filesize,
                             force,
                             verbose, 
                             jld2_kw)
 end
 
+#####
+##### File and output initialization
+#####
+
+function initialize_new_file!(filepath, model, outputs, including, jld2_kw)
+    
+    jldopen(filepath, "a+"; jld2_kw...) do file
+        # Serialize the grid, and save properties for the rest
+        serializeproperty!(file, model, model.grid)
+        saveproperty!(file, "grid_properties", model.grid)
+        saveproperties!(file, model, including)
+
+        for (name, output) in in zip(keys(outputs), values(outputs))
+            initialize_output!(file, output, name)
+        end
+
+        # User-defined init:
+        init(file, model)
+    end
+
+    return nothing
+end
+
+initialize_new_file!(writer, model) =
+    initalize_new_file(writer.filepath, model, writer.outputs, writer.including, writer.jld2_kw)
+
+initialize_output!(file, output) = nothing # fallback
+
+serialize_location!(file, output::AbstractField{X, Y, Z}, name) where {X, Y, Z} =
+    serializeproperty!(file, "output/$name/location", (X(), Y(), Z()))
+
+serialize_boundary_conditions!(file, output, name) = nothing
+
+serialize_boundary_conditions!(file, output::Field, name) =
+    serializeproperty!(file, "output/$name/boundary_conditions", p.boundary_conditions)
+
+function initialize_output!(file, output::AbstractField, name)
+    serialize_location!(file, output, name)
+    serialize_boundary_conditions!(file, output, name)
+    return nothing
+end
+
+#####
+##### Writing output during simulations
+#####
+
+""" Write JLD2 output to file. """
 function write_output!(writer::JLD2OutputWriter, model)
 
     verbose = writer.verbose
@@ -188,7 +237,7 @@ function write_output!(writer::JLD2OutputWriter, model)
     verbose && @info "Fetching time: $(prettytime(tc))"
 
     # Start a new file if the filesize exceeds max_filesize
-    filesize(writer.filepath) >= writer.max_filesize && start_next_file(model, writer)
+    filesize(writer.filepath) >= writer.max_filesize && start_next_file!(model, writer)
 
     # Write output from `data`
     path = writer.filepath
@@ -196,8 +245,11 @@ function write_output!(writer::JLD2OutputWriter, model)
 
     start_time, old_filesize = time_ns(), filesize(path)
 
-    jld2output!(path, model.clock.iteration, model.clock.time, data, writer.jld2_kw)
+    jld2output!(path, model.clock.iteration, model.clock.time, writer.output_index, data, writer.jld2_kw)
 
+    writer.output_index += 1
+
+    # Print a helpful message
     end_time, new_filesize = time_ns(), filesize(path)
 
     verbose && @info @sprintf("Writing done: time=%s, size=%s, Δsize=%s",
@@ -209,24 +261,29 @@ function write_output!(writer::JLD2OutputWriter, model)
 end
 
 """
-    jld2output!(path, iter, time, data, kwargs)
+    jld2output!(path, iter, time, index, data, kwargs)
 
 Write the (name, value) pairs in `data`, including the simulation
-`time`, to the JLD2 file at `path` in the `timeseries` group,
-stamping them with `iter` and using `kwargs` when opening
+`time` and `iter`, to the JLD2 file at `path` in the `output` group,
+stamping them with `index` and using `kwargs` when opening
 the JLD2 file.
 """
-function jld2output!(path, iter, time, data, kwargs)
+function jld2output!(path, iter, time, index, data, kwargs)
     jldopen(path, "r+"; kwargs...) do file
-        file["timeseries/t/$iter"] = time
+        file["output/time/$index"] = time
+        file["output/iterations/$index"] = iter
         for (name, datum) in data
-            file["timeseries/$name/$iter"] = datum
+            file["output/$name/$index"] = datum
         end
     end
     return nothing
 end
 
-function start_next_file(model, writer::JLD2OutputWriter)
+#####
+##### Memory management
+#####
+
+function start_next_file!(model, writer::JLD2OutputWriter)
     verbose = writer.verbose
     sz = filesize(writer.filepath)
     verbose && @info begin
@@ -245,10 +302,7 @@ function start_next_file(model, writer::JLD2OutputWriter)
     writer.force && isfile(writer.filepath) && rm(writer.filepath, force=true)
     verbose && @info "Now writing to: $(writer.filepath)"
 
-    jldopen(writer.filepath, "a+"; writer.jld2_kw...) do file
-        writer.init(file, model)
-        saveproperties!(file, model, writer.including)
-    end
+    initialize_new_file!(writer, model)
 
     return nothing
 end
