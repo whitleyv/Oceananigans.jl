@@ -115,23 +115,39 @@ end
 ##### Functions for calling ContinuousForcing in a time-stepping kernel
 #####
 
-@inline field_arguments(i, j, k, grid, model_fields::M,
-                        ℑ::Tuple{I1}, idx::NTuple{1}) where {I1, M} =
-    @inbounds tuple(ℑ[1](i, j, k, grid, model_fields[idx[1]]))
+@inline function field_arguments(i, j, k, grid, model_fields::M, ℑ::Tuple{I1}, idx::NTuple{1}) where {I1, M}
 
-@inline field_arguments(i, j, k, grid, model_fields::M,
-                        ℑ::Tuple{I1, I2}, idx::NTuple{2}) where {I1, I2, M} =
-    @inbounds tuple(ℑ[1](i, j, k, grid, model_fields[idx[1]]),
-                    ℑ[2](i, j, k, grid, model_fields[idx[2]]))
+    @inbounds begin
+            ℑ1 = ℑ[1]
+          idx1 = idx[1]
+        field1 = model_fields[idx1]
+        field1_ijk = ℑ1(i, j, k, grid, field1)
+    end
+                        
+    return @inbounds tuple(field1_ijk)
+end
 
-@inline field_arguments(i, j, k, grid, model_fields::M,
-                        ℑ::Tuple{I1, I2, I3}, idx::NTuple{3}) where {I1, I2, I3, M} =
-    @inbounds tuple(ℑ[1](i, j, k, grid, model_fields[idx[1]]),
-                    ℑ[2](i, j, k, grid, model_fields[idx[2]]),
-                    ℑ[3](i, j, k, grid, model_fields[idx[3]]))
+@inline function field_arguments(i, j, k, grid, model_fields::M, ℑ::Tuple{I1, I2}, idx::NTuple{2}) where {I1, I2, M}
 
-@inline field_arguments(i, j, k, grid, model_fields::M, ℑ, idx::NTuple{N}) where {N, M} =
-    @inbounds ntuple(n -> ℑ[n](i, j, k, grid, model_fields[idx[n]]), Val(N))
+    @inbounds begin
+            ℑ1 = ℑ[1]
+          idx1 = idx[1]
+        field1 = model_fields[idx1]
+        field1_ijk = ℑ1(i, j, k, grid, field1)
+
+            ℑ2 = ℑ[2]
+          idx2 = idx[2]
+        field2 = model_fields[idx2]
+        field2_ijk = ℑ1(i, j, k, grid, field2)
+    end
+
+    return @inbounds tuple(field1_ijk, field2_ijk)
+end
+
+@inline function field_arguments(i, j, k, grid, model_fields::M, ℑ, idx::NTuple{N}) where {N, M}
+    @inbounds fields = ntuple(n -> model_fields[idx[n]], Val(N))
+    return @inbounds ntuple(n -> ℑ[n](i, j, k, grid, fields[n], Val(N)))
+end
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object without parameters. """
 @inline function forcing_func_arguments(i, j, k, grid,
