@@ -115,41 +115,33 @@ end
 ##### Functions for calling ContinuousForcing in a time-stepping kernel
 #####
 
-#=
-@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1}, idx::NTuple{1}) where I1 =
-    @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),)
+@inline field_arguments(i, j, k, grid, model_fields::NTuple{M, A},
+                        ℑ::Tuple{I1}, idx::NTuple{1}) where {I1, M, A} =
+    @inbounds tuple(ℑ[1](i, j, k, grid, model_fields[idx[1]]))
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1, I2}, idx::NTuple{2}) where {I1, I2} =
-    @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),
-               ℑ[2](i, j, k, grid, model_fields[idx[2]]))
+@inline field_arguments(i, j, k, grid, model_fields::NTuple{M, A},
+                        ℑ::Tuple{I1, I2}, idx::NTuple{2}) where {I1, I2, M, A} =
+    @inbounds tuple(ℑ[1](i, j, k, grid, model_fields[idx[1]]),
+                    ℑ[2](i, j, k, grid, model_fields[idx[2]]))
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1, I2, I3}, idx::NTuple{3}) where {I1, I2, I3} =
-    @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),
-               ℑ[2](i, j, k, grid, model_fields[idx[2]]),
-               ℑ[3](i, j, k, grid, model_fields[idx[3]]))
-=#
+@inline field_arguments(i, j, k, grid, model_fields::NTuple{M, A},
+                        ℑ::Tuple{I1, I2, I3}, idx::NTuple{3}) where {I1, I2, I3, M, A} =
+    @inbounds tuple(ℑ[1](i, j, k, grid, model_fields[idx[1]]),
+                    ℑ[2](i, j, k, grid, model_fields[idx[2]]),
+                    ℑ[3](i, j, k, grid, model_fields[idx[3]]))
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ, idx::NTuple{N}) where N =
+@inline field_arguments(i, j, k, grid, model_fields::NTuple{M, A}, ℑ, idx::NTuple{N}) where {N, M, A} =
     @inbounds ntuple(n -> ℑ[n](i, j, k, grid, model_fields[idx[n]]), Val(N))
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object without parameters. """
-@inline function forcing_func_arguments(i, j, k, grid, model_fields, ::Nothing, forcing)
-
-    ℑ = forcing.field_dependencies_interp
-    idx = forcing.field_dependencies_indices
-
-    return field_arguments(i, j, k, grid, model_fields, ℑ, idx)
-end
+@inline forcing_func_arguments(i, j, k, grid, model_fields::NTuple{M, A},
+                               ::Nothing, ℑ::I, idx::NTuple{N}) where {I, N, M, A} =                              
+    field_arguments(i, j, k, grid, model_fields, ℑ, idx)
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object with parameters. """
-@inline function forcing_func_arguments(i, j, k, grid, model_fields, parameters, forcing)
-
-    ℑ = forcing.field_dependencies_interp
-    idx = forcing.field_dependencies_indices
-    parameters = forcing.parameters
-
+@inline function forcing_func_arguments(i, j, k, grid, model_fields::NTuple{M, A},
+                                        parameters, ℑ::I, idx::NTuple{N}) where {I, N, M, A}
     field_args = field_arguments(i, j, k, grid, model_fields, ℑ, idx)
-
     return tuple(field_args..., parameters)
 end
 
