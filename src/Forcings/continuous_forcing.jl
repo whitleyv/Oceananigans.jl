@@ -134,20 +134,27 @@ end
     @inbounds ntuple(n -> ℑ[n](i, j, k, grid, model_fields[idx[n]]), Val(N))
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object without parameters. """
-@inline forcing_func_arguments(i, j, k, grid, model_fields::NTuple{M, A},
-                               ::Nothing, ℑ::I, idx::NTuple{N}) where {I, N, M, A} =                              
-    field_arguments(i, j, k, grid, model_fields, ℑ, idx)
+@inline function forcing_func_arguments(i, j, k, grid, model_fields::NTuple{M, A},
+                                        ::Nothing, ℑ::I, idx::NTuple{N}) where {I, N, M, A}
+
+    return field_arguments(i, j, k, grid, model_fields, ℑ, idx)
+end
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object with parameters. """
 @inline function forcing_func_arguments(i, j, k, grid, model_fields::NTuple{M, A},
                                         parameters, ℑ::I, idx::NTuple{N}) where {I, N, M, A}
+
     field_args = field_arguments(i, j, k, grid, model_fields, ℑ, idx)
+
     return tuple(field_args..., parameters)
 end
 
 @inline function (forcing::ContinuousForcing{X, Y, Z, F})(i, j, k, grid, clock, model_fields) where {X, Y, Z, F}
 
-    args = forcing_func_arguments(i, j, k, grid, model_fields, forcing.parameters, forcing)
+    args = forcing_func_arguments(i, j, k, grid, model_fields,
+                                  forcing.parameters,
+                                  forcing.field_dependencies_interp,
+                                  forcing.field_dependencies_indices)
 
     return @inbounds forcing.func(xnode(X, i, grid), ynode(Y, j, grid), znode(Z, k, grid), clock.time, args...)
 end
