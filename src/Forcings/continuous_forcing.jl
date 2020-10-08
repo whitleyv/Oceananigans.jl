@@ -32,8 +32,9 @@ struct ContinuousForcing{X, Y, Z, D, N, F, P, TD, Tℑ}
     end
 
     # Non-public "final" constructor.
-    function ContinuousForcing{X, Y, Z}(func, parameters=nothing, field_dependencies=(),
-                                        field_dependencies_indices=(), field_dependencies_interp=()) where {X, Y, Z}
+    function ContinuousForcing{X, Y, Z}(func, parameters=nothing,
+                                        field_dependencies=(), field_dependencies_interp=()) where {X, Y, Z}
+
         return new{X, Y, Z,
                    field_dependencies,
                    length(field_dependencies),
@@ -102,13 +103,12 @@ function regularize_forcing(forcing::ContinuousForcing, field_name, model_field_
     field_dependencies_interp = Tuple(interpolation_operator(assumed_field_location(name), (X, Y, Z))
                                       for name in forcing.field_dependencies)
 
-    field_dependencies_indices = ntuple(length(forcing.field_dependencies)) do i
-        name = forcing.field_dependencies[i]
-        findfirst(isequal(name), model_field_names)
-    end
+    #field_dependencies_indices = ntuple(length(forcing.field_dependencies)) do i
+    #    name = forcing.field_dependencies[i]
+    #    findfirst(isequal(name), model_field_names)
+    #end
 
-    return ContinuousForcing{X, Y, Z}(forcing.func, forcing.parameters, forcing.field_dependencies,
-                                      field_dependencies_indices, field_dependencies_interp)
+    return ContinuousForcing{X, Y, Z}(forcing.func, forcing.parameters, forcing.field_dependencies, field_dependencies_interp)
 end
 
 #####
@@ -160,6 +160,5 @@ Base.show(io::IO, forcing::ContinuousForcing{Nothing, Nothing, Nothing, P}) wher
 Adapt.adapt_structure(to, forcing::ContinuousForcing{X, Y, Z}) where {X, Y, Z} =
     ContinuousForcing{X, Y, Z}(Adapt.adapt(to, forcing.func),
                                Adapt.adapt(to, forcing.parameters),
-                               nothing,
-                               nothing,
+                               (),
                                Adapt.adapt(to, forcing.ℑ))
