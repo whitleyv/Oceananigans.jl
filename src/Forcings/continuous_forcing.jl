@@ -126,7 +126,7 @@ end
     @inbounds ntuple(n -> forcing.ℑ[n](i, j, k, grid, getproperty(model_fields, D[n])), Val(N))
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object without parameters. """
-@inline function forcing_func_arguments(i, j, k, grid, ::Nothing, forcing, model_fields) =
+@inline forcing_func_arguments(i, j, k, grid, ::Nothing, forcing, model_fields) =
     field_arguments(i, j, k, grid, forcing, model_fields)
 
 @inline function forcing_func_arguments(i, j, k, grid, parameters, forcing, model_fields)
