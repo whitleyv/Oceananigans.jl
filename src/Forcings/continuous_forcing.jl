@@ -40,7 +40,7 @@ struct ContinuousForcing{X, Y, Z, D, N, F, P, TD, Tℑ}
                    typeof(func),
                    typeof(parameters),
                    typeof(field_dependencies),
-                   typeof(g)}(func, parameters, field_dependencies, field_dependencies_interp)
+                   typeof(field_dependencies_interp)}(func, parameters, field_dependencies, field_dependencies_interp)
     end
 end
 
@@ -92,14 +92,14 @@ To do this, we
     * Obtain the location `X, Y, Z` at which `ContinuousForcing` is applied
     * Use `field_dependencies` tuple of `Symbols` to infer the tuple `field_dependencies_indices`
       that maps `field_dependencies` to `model_fields` (for use on the GPU)
-    * Diagnose the interpolation operators `g` needed to interpolate
+    * Diagnose the interpolation operators `field_dependencies_interp` needed to interpolate
       `field_dependencies` to `X, Y, Z`
 """
 function regularize_forcing(forcing::ContinuousForcing, field_name, model_field_names)
 
     X, Y, Z = assumed_field_location(field_name)
 
-    g = Tuple(interpolation_operator(assumed_field_location(name), (X, Y, Z))
+    field_dependencies_interp = Tuple(interpolation_operator(assumed_field_location(name), (X, Y, Z))
                                       for name in forcing.field_dependencies)
 
     field_dependencies_indices = ntuple(length(forcing.field_dependencies)) do i
@@ -108,7 +108,7 @@ function regularize_forcing(forcing::ContinuousForcing, field_name, model_field_
     end
 
     return ContinuousForcing{X, Y, Z}(forcing.func, forcing.parameters, forcing.field_dependencies,
-                                      field_dependencies_indices, g)
+                                      field_dependencies_indices, field_dependencies_interp)
 end
 
 #####
