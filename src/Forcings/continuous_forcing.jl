@@ -6,7 +6,7 @@ using Oceananigans.Fields: assumed_field_location, show_location
 using Oceananigans.Utils: tupleit
 
 """
-    ContinuousForcing{X, Y, Z, P, F, D, I}
+    ContinuousForcing{X, Y, Z, D, N, F, P, TD, Tℑ}
 
 A callable object that implements a "continuous form" forcing function
 on a field at the location `X, Y, Z` with optional parameters.
@@ -136,11 +136,17 @@ end
     return tuple(field_args..., parameters)
 end
 
-@inline function (forcing::ContinuousForcing{X, Y, Z, F})(i, j, k, grid, clock, model_fields) where {X, Y, Z, F}
+@inline function (forcing::ContinuousForcing{X, Y, Z, D, N, F})(i, j, k, grid, clock, model_fields) where {X, Y, Z, D, N, F}
+
+    func = forcing.func
+    x = xnode(X, i, grid)
+    y = ynode(Y, j, grid)
+    z = znode(Z, k, grid)
+    t = clock.time
 
     args = forcing_func_arguments(i, j, k, grid, forcing.parameters, forcing, model_fields)
 
-    return @inbounds forcing.func(xnode(X, i, grid), ynode(Y, j, grid), znode(Z, k, grid), clock.time, args...)
+    return @inbounds func(x, y, z, t, args...)
 end
 
 """Show the innards of a `ContinuousForcing` in the REPL."""
