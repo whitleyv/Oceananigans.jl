@@ -135,7 +135,6 @@ end
 @inline function forcing_func_arguments(i, j, k, grid, ::Nothing, forcing, model_fields) =
     field_arguments(i, j, k, grid, forcing, model_fields)
 
-""" Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object with parameters. """
 @inline function forcing_func_arguments(i, j, k, grid, parameters, forcing, model_fields)
 
     field_args = field_arguments(i, j, k, grid, forcing, model_fields)
@@ -145,7 +144,7 @@ end
 
 @inline function (forcing::ContinuousForcing{X, Y, Z, F})(i, j, k, grid, clock, model_fields) where {X, Y, Z, F}
 
-    args = forcing_func_arguments(i, j, k, grid, model_fields, forcing.parameters, forcing)
+    args = forcing_func_arguments(i, j, k, grid, forcing.parameters, forcing, model_fields)
 
     return @inbounds forcing.func(xnode(X, i, grid), ynode(Y, j, grid), znode(Z, k, grid), clock.time, args...)
 end
