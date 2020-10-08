@@ -11,12 +11,12 @@ using Oceananigans.Utils: tupleit
 A callable object that implements a "continuous form" forcing function
 on a field at the location `X, Y, Z` with optional parameters.
 """
-struct ContinuousForcing{X, Y, Z, P, F, D, I, ℑ}
+struct ContinuousForcing{X, Y, Z, D, ℑ, N, P, F, TD, D, I, Tℑ}
                           func :: F
                     parameters :: P
-            field_dependencies :: D
+            field_dependencies :: TD
     field_dependencies_indices :: I
-     field_dependencies_interp :: ℑ
+     field_dependencies_interp :: Tℑ
 
     # Non-public "temporary" constructor that stores func, parameters, and field_dependencies
     # for later regularization
@@ -24,6 +24,9 @@ struct ContinuousForcing{X, Y, Z, P, F, D, I, ℑ}
         field_dependencies = tupleit(field_dependencies)
 
         return new{Nothing, Nothing, Nothing,
+                   field_dependencies,
+                   Nothing,
+                   length(field_dependencies),
                    typeof(parameters), 
                    typeof(func), 
                    typeof(field_dependencies),
@@ -35,6 +38,9 @@ struct ContinuousForcing{X, Y, Z, P, F, D, I, ℑ}
     function ContinuousForcing{X, Y, Z}(func, parameters=nothing, field_dependencies=(),
                                         field_dependencies_indices=(), field_dependencies_interp=()) where {X, Y, Z}
         return new{X, Y, Z,
+                   field_dependencies,
+                   field_dependencies_interp,
+                   length(field_dependencies),
                    typeof(parameters),
                    typeof(func),
                    typeof(field_dependencies),
@@ -115,40 +121,24 @@ end
 ##### Functions for calling ContinuousForcing in a time-stepping kernel
 #####
 
-#=
-@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1}, idx::NTuple{1}) where I1 =
-    @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),)
+@inline field_arguments(i, j, k, grid, forcing::ContinuousForcing{X, Y, Z, D, ℑ, 1}, model_fields) where {X, Y, Z, D, ℑ} =
+    @inbounds (ℑ[1](i, j, k, grid, getproperty(model_fields, D[1])),)
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1, I2}, idx::NTuple{2}) where {I1, I2} =
-    @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),
-               ℑ[2](i, j, k, grid, model_fields[idx[2]]))
+@inline field_arguments(i, j, k, grid, forcing::ContinuousForcing{X, Y, Z, D, ℑ, 2}, model_fields) where {X, Y, Z, D, ℑ} =
+    @inbounds (ℑ[1](i, j, k, grid, getproperty(model_fields, D[1])),
+               ℑ[2](i, j, k, grid, getproperty(model_fields, D[2])))
 
-@inline field_arguments(i, j, k, grid, model_fields, ℑ::Tuple{I1, I2, I3}, idx::NTuple{3}) where {I1, I2, I3} =
-    @inbounds (ℑ[1](i, j, k, grid, model_fields[idx[1]]),
-               ℑ[2](i, j, k, grid, model_fields[idx[2]]),
-               ℑ[3](i, j, k, grid, model_fields[idx[3]]))
-=#
-
-@inline field_arguments(i, j, k, grid, model_fields, ℑ, idx::NTuple{N}) where N =
-    @inbounds ntuple(n -> ℑ[n](i, j, k, grid, model_fields[idx[n]]), Val(N))
+@inline field_arguments(i, j, k, grid, forcing::ContinuousForcing{X, Y, Z, D, ℑ, N}, model_fields) where {X, Y, Z, D, ℑ, N} =
+    @inbounds ntuple(n -> ℑ[n](i, j, k, grid, getproperty(model_fields, D[n])), Val(N))
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object without parameters. """
-@inline function forcing_func_arguments(i, j, k, grid, model_fields, ::Nothing, forcing)
-
-    ℑ = forcing.field_dependencies_interp
-    idx = forcing.field_dependencies_indices
-
-    return field_arguments(i, j, k, grid, model_fields, ℑ, idx)
-end
+@inline function forcing_func_arguments(i, j, k, grid, ::Nothing, forcing, model_fields) =
+    field_arguments(i, j, k, grid, forcing, model_fields)
 
 """ Returns the arguments that follow `x, y, z, t` in a `ContinuousForcing` object with parameters. """
-@inline function forcing_func_arguments(i, j, k, grid, model_fields, parameters, forcing)
+@inline function forcing_func_arguments(i, j, k, grid, parameters, forcing, model_fields)
 
-    ℑ = forcing.field_dependencies_interp
-    idx = forcing.field_dependencies_indices
-    parameters = forcing.parameters
-
-    field_args = field_arguments(i, j, k, grid, model_fields, ℑ, idx)
+    field_args = field_arguments(i, j, k, grid, forcing, model_fields)
 
     return tuple(field_args..., parameters)
 end
