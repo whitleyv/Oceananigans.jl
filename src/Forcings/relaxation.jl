@@ -1,3 +1,5 @@
+using Adapt
+
 import Oceananigans: short_show
 
 @inline zerofunction(args...) = 0
@@ -171,3 +173,10 @@ end
 short_show(l::LinearTarget{:x}) = "$(l.intercept) + $(l.gradient) * x"
 short_show(l::LinearTarget{:y}) = "$(l.intercept) + $(l.gradient) * y"
 short_show(l::LinearTarget{:z}) = "$(l.intercept) + $(l.gradient) * z"
+
+Adapt.adapt_structure(to, relaxation::Relaxation) =
+    Relaxation(
+               Adapt.adapt(to, relaxation.rate),
+               Adapt.adapt(to, relaxation.mask),
+               Adapt.adapt(to, relaxation.target)
+              )
