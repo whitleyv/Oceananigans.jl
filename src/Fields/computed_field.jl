@@ -81,7 +81,7 @@ compute!(field::ComputedField{X, Y, Z, <:FieldStatus}, time) where {X, Y, Z} =
     conditional_compute!(field, time)
 
 """Compute an `operand` and store in `data`."""
-@kernel function _compute!(data, operand)
+@kernel function _compute!(data, operand::O) where O
     i, j, k = @index(Global, NTuple)
     @inbounds data[i, j, k] = operand[i, j, k]
 end
