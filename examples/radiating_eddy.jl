@@ -84,7 +84,7 @@ u, v, w = model.velocities
 
 p = PressureField(model)
 
-outputs = merge(model.velocities, model.tracers, (speed=speed, p=p))
+outputs = merge(model.velocities, model.tracers, (p=p,))
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, outputs,
                                                       schedule = TimeInterval(1.0),
