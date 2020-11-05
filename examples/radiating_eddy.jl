@@ -13,13 +13,16 @@ using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
 using Oceananigans.AbstractOperations
 
+using Oceananigans.Fields: PressureField
+
 using Printf
 
-grid = RegularCartesianGrid(size=(64, 64, 1), x=(-1e6, 1e6), y=(-1e6, 1e6), z=(-1e3, 0),
+grid = RegularCartesianGrid(size=(128, 128, 1), x=(-8, 8), y=(-8, 8), z=(-1, 0),
                             topology=(Bounded, Bounded, Bounded))
 
 # ## Turbulence closure
-closure = AnisotropicBiharmonicDiffusivity(νh=1)
+#closure = AnisotropicBiharmonicDiffusivity(νh=1)
+closure = IsotropicDiffusivity(ν=1e-2)
 
 # ## Model building
 
@@ -27,34 +30,24 @@ model = IncompressibleModel(architecture = CPU(),
                             timestepper = :RungeKutta3, 
                             advection = UpwindBiasedFifthOrder(),
                             grid = grid,
-                            coriolis = BetaPlane(latitude=45),
+                            coriolis = BetaPlane(f₀=1, β=0.1),
                             buoyancy = nothing,
                             tracers = nothing,
                             closure = closure)
 
 # ## Initial conditions
 
-eddy_u(x, y, z, x₀, y₀, U, R) = - U * (y - y₀) / R * exp(-((x - x₀)^2 + (y - y₀)^2) / 2R^2)
-eddy_v(x, y, z, x₀, y₀, U, R) = + U * (x - x₀) / R * exp(-((x - x₀)^2 + (y - y₀)^2) / 2R^2)
+eddy_u(x, y, z, ϵ) = - ϵ * y * exp(-(x^2 + y^2))
+eddy_v(x, y, z, ϵ) = + ϵ * x * exp(-(x^2 + y^2))
 
-U = 0.1
-R = 1e5
+ϵ = 0.01
 
-uᵢ(x, y, z) = eddy_u(x, y, z, -5e5, -5e5, U, R) +
-              eddy_u(x, y, z, +0.0,  0.0, U, R) + 
-              eddy_u(x, y, z, +5e5, +5e5, U, R)
-
-vᵢ(x, y, z) = eddy_v(x, y, z, -5e5, -5e5, U, R) +
-              eddy_v(x, y, z, +0.0,  0.0, U, R) + 
-              eddy_v(x, y, z, +5e5, +5e5, U, R)
+uᵢ(x, y, z) = eddy_u(x, y, z, ϵ)
+vᵢ(x, y, z) = eddy_v(x, y, z, ϵ)
 
 set!(model, u=uᵢ, v=vᵢ)
 
 # ## Simulation setup
-
-max_Δt = 10day
-
-wizard = TimeStepWizard(cfl=1.0, Δt=12hour, max_change=1.1, max_Δt=max_Δt)
 
 # Finally, we set up and run the the simulation.
 
@@ -62,52 +55,52 @@ umax = FieldMaximum(abs, model.velocities.u)
 vmax = FieldMaximum(abs, model.velocities.v)
 wmax = FieldMaximum(abs, model.velocities.w)
 
-wall_clock = time_ns()
+wall_clock = [time_ns()]
 
 function print_progress(simulation)
     model = simulation.model
 
     ## Print a progress message
-    msg = @sprintf("i: %04d, t: %s, Δt: %s, umax = (%.1e, %.1e, %.1e) ms⁻¹, wall time: %s\n",
+    msg = @sprintf("i: %04d, t: %.2f, Δt: %.2f, umax = (%.1e, %.1e, %.1e), wall time: %s\n",
                    model.clock.iteration,
-                   prettytime(model.clock.time),
-                   prettytime(wizard.Δt),
+                   model.clock.time,
+                   simulation.Δt,
                    umax(), vmax(), wmax(),
-                   prettytime(1e-9 * (time_ns() - wall_clock))
+                   prettytime(1e-9 * (time_ns() - wall_clock[1]))
                   )
 
     @info msg
 
+    wall_clock[1] = time_ns()
+
     return nothing
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=480days, iteration_interval=10, progress=print_progress)
+simulation = Simulation(model, Δt=0.5, stop_time=60.0, iteration_interval=10, progress=print_progress)
 
 # ## Output
 
 u, v, w = model.velocities
 
-speed = ComputedField(u^2 + v^2)
+p = PressureField(model)
 
-outputs = merge(model.velocities, model.tracers, (speed=speed,))
+outputs = merge(model.velocities, model.tracers, (speed=speed, p=p))
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, outputs,
-                                                      schedule = TimeInterval(8day),
+                                                      schedule = TimeInterval(1.0),
                                                       prefix = "radiating_eddies",
-                                                      field_slicer = FieldSlicer(k=model.grid.Nz),
                                                       force = true)
 
 run!(simulation)
 
 # # A neat movie
 
-x, y, z = nodes(model.velocities.u)
+xu, yu, zu = nodes(model.velocities.u)
+xv, yv, zv = nodes(model.velocities.v)
+xp, yp, zp = nodes(p)
 
-xlims = (-grid.Lx/2 * 1e-3, grid.Lx/2 * 1e-3)
-ylims = (-grid.Ly/2 * 1e-3, grid.Ly/2 * 1e-3)
-
-x_km = x * 1e-3
-y_km = y * 1e-3
+xlims = (-grid.Lx/2, grid.Lx/2)
+ylims = (-grid.Ly/2, grid.Ly/2)
 
 nothing # hide
 
@@ -148,30 +141,40 @@ anim = @animate for (i, iter) in enumerate(iterations)
     t = file["timeseries/t/$iter"]
     u = file["timeseries/u/$iter"][:, :, 1]
     v = file["timeseries/v/$iter"][:, :, 1]
-    s = file["timeseries/speed/$iter"][:, :, 1]
+    p = file["timeseries/p/$iter"][:, :, 1]
 
-    ulims, ulevels = divergent_levels(u, U/2)
-    slims, slevels = sequential_levels(s, (0.0, U/2))
+    ulims, ulevels = divergent_levels(u, ϵ/10)
+    plims, plevels = divergent_levels(p, maximum(abs, p) + 1e-9)
 
     kwargs = (aspectratio=:equal, linewidth=0, xlims=xlims,
               ylims=ylims, xlabel="x (km)", ylabel="y (km)")
 
-    u_plot = contourf(x_km, y_km, u';
+    u_plot = contourf(xu, yu, clamp.(u, ulims[1], ulims[2])';
                       color = :balance,
                       clims = ulims,
                       levels = ulevels,
                       kwargs...)
                         
-    s_plot = contourf(x_km, y_km, s';
-                      color = :thermal,
-                      clims = slims,
-                      levels = slevels,
+    v_plot = contourf(xv, yv, clamp.(v, ulims[1], ulims[2])';
+                      color = :balance,
+                      clims = ulims,
+                      levels = ulevels,
+                      kwargs...)
+
+    p_plot = contourf(xp, yp, clamp.(p, plims[1], plims[2])';
+                      color = :balance,
+                      clims = plims,
+                      levels = plevels,
                       kwargs...)
                              
-    plot(u_plot, s_plot, size=(800, 500),
-         title = ["u(t="*string(round(t/day, digits=1))*" day)" "speed"])
+    u_title = @sprintf("u at t = %.2f", t)
+    v_title = @sprintf("v at t = %.2f", t)
+    p_title = @sprintf("p at t = %.2f", t)
+
+    plot(u_plot, v_plot, p_plot, size=(1600, 400), layout=(1, 3),
+         title = [u_title v_title p_title])
 
     iter == iterations[end] && close(file)
 end
 
-gif(anim, "radiating_eddies.gif", fps = 8) # hide
+gif(anim, "radiating_eddy.gif", fps = 8) # hide
