@@ -22,7 +22,8 @@ using Pkg
 
 using Oceananigans, Oceananigans.Advection
 
-grid = RegularCartesianGrid(size=(128, 128, 1), extent=(2π, 2π, 2π))
+grid = RegularCartesianGrid(size=(128, 128, 1), extent=(2π, 2π, 2π),
+                            topology=(Periodic, Bounded, Bounded))
 
 model = IncompressibleModel(timestepper = :RungeKutta3,
                               advection = UpwindBiasedFifthOrder(),
@@ -40,10 +41,12 @@ model = IncompressibleModel(timestepper = :RungeKutta3,
 
 using Statistics
 
-u₀ = rand(size(model.grid)...)
+u₀ = rand(size(model.velocities.u)...)
 u₀ .-= mean(u₀)
+v₀ = rand(size(model.velocities.v)...)
+v₀ .-= mean(v₀)
 
-set!(model, u=u₀, v=u₀)
+set!(model, u=u₀, v=v₀)
 
 # ## Computing vorticity and speed
 
@@ -90,8 +93,8 @@ simulation = Simulation(model, Δt=wizard, stop_time=100, iteration_interval=1, 
 using Oceananigans.OutputWriters
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, (ω=ω_field, s=s_field),
-                                                      schedule = TimeInterval(2),
-                                                      prefix = "two_dimensional_turbulence",
+                                                      schedule = TimeInterval(1),
+                                                      prefix = "geostrophic_turbulence",
                                                       force = true)
 
 # ## Running the simulation
@@ -132,10 +135,10 @@ anim = @animate for (i, iteration) in enumerate(iterations)
     ω_snapshot = file["timeseries/ω/$iteration"][:, :, 1]
     s_snapshot = file["timeseries/s/$iteration"][:, :, 1]
 
-    ω_lim = 2.0
+    ω_lim = 4.0
     ω_levels = range(-ω_lim, stop=ω_lim, length=20)
 
-    s_lim = 0.2
+    s_lim = 0.5
     s_levels = range(0, stop=s_lim, length=20)
 
     kwargs = (xlabel="x", ylabel="y", aspectratio=1, linewidth=0, colorbar=true,
