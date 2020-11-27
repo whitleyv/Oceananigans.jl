@@ -1,6 +1,6 @@
 using Glob
 
-using Oceananigans.Utils: initialize_schedule!
+using Oceananigans.Utils: initialize_schedule!, time_to_next_action
 using Oceananigans.Fields: set!
 using Oceananigans.OutputWriters: WindowedTimeAverage, checkpoint_superprefix
 using Oceananigans.TimeSteppers: QuasiAdamsBashforth2TimeStepper, RungeKutta3TimeStepper, update_state!
@@ -71,6 +71,32 @@ ab2_or_rk3_time_step!(model::AbstractModel{<:RungeKutta3TimeStepper}, Δt; euler
 we_want_to_pickup(pickup::Bool) = pickup
 we_want_to_pickup(pickup) = true
 
+function align_time_step(sim)
+    clock = sim.model.clock
+
+    # Align time step with output writing
+    if length(sim.output_writers) > 0
+        times_to_next_outputs = [time_to_next_action(writer.schedule, clock) for writer in values(sim.output_writers)]
+        times_to_next_outputs = filter(!ismissing, times_to_next_outputs)
+
+        if length(times_to_next_outputs) > 0
+            time_to_next_output = minimum(times_to_next_outputs)
+            Δt = min(get_Δt(sim.Δt), time_to_next_output)
+        else
+            Δt = get_Δt(sim.Δt)
+        end
+    else
+        Δt = get_Δt(sim.Δt)
+    end
+
+    # Align time step with simulation stop time
+    if clock.time + Δt > sim.stop_time
+        Δt = sim.stop_time - clock.time
+    end
+
+    return Δt
+end
+
 """
     run!(simulation; pickup=false)
 
@@ -88,10 +114,10 @@ leaving all other model properties unchanged.
 Possible values for `pickup` are:
 
     * `pickup=true` will pick a simulation up from the latest checkpoint associated with
-      the `Checkpointer` in simulation.output_writers`. 
+      the `Checkpointer` in simulation.output_writers`.
 
     * `pickup=iteration::Int` will pick a simulation up from the checkpointed file associated
-       with `iteration` and the `Checkpointer` in simulation.output_writers`. 
+       with `iteration` and the `Checkpointer` in simulation.output_writers`.
 
     * `pickup=filepath::String` will pick a simulation up from checkpointer data in `filepath`.
 
@@ -122,7 +148,7 @@ function run!(sim; pickup=false)
     for writer in values(sim.output_writers)
         open(writer)
         initialize_schedule!(writer.schedule)
-        add_dependencies!(sim.diagnostics, writer) 
+        add_dependencies!(sim.diagnostics, writer)
     end
 
     [initialize_schedule!(diag.schedule) for diag in values(sim.diagnostics)]
@@ -136,9 +162,12 @@ function run!(sim; pickup=false)
             [write_output!(writer, sim.model) for writer in values(sim.output_writers)]
         end
 
-        for n in 1:sim.iteration_interval
+        iterations = min(sim.iteration_interval, sim.stop_iteration - clock.iteration)
+
+        for n in 1:iterations
+            Δt = align_time_step(sim)
             euler = clock.iteration == 0 || (sim.Δt isa TimeStepWizard && n == 1)
-            ab2_or_rk3_time_step!(model, get_Δt(sim.Δt), euler=euler)
+            ab2_or_rk3_time_step!(model, Δt, euler=euler)
 
             # Run diagnostics, then write output
             [  diag.schedule(model) && run_diagnostic!(diag, sim.model) for diag in values(sim.diagnostics)]
