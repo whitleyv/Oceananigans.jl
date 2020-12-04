@@ -22,7 +22,7 @@ bib = CitationBibliography(bib_filepath)
 #####
 
 const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
-const OUTPUT_DIR   = joinpath(@__DIR__, "src/generated")
+const OUTPUT_DIR   = joinpath(@__DIR__, "src", "generated")
 
 examples = [
     "one_dimensional_diffusion.jl",
