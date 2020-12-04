@@ -4,6 +4,7 @@ using Oceananigans.Grids: Face, Cell
 import Base: identity
 
 @inline identity(i, j, k, grid, c) = @inbounds c[i, j, k]
+@inline identity(i, j, k, grid, c::AbstractArray) = @inbounds c[i, j, k]
 @inline identity(i, j, k, grid, a::Number) = a
 
 """Evaluate the function `F` with signature `F(i, j, k, grid, args...)` at index `i, j, k` without
