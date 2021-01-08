@@ -51,8 +51,10 @@ simulation = Simulation(model, Δt=5seconds, stop_time=1hour, iteration_interval
 
 # ## Output
 
+u, v, w = model.velocities
+KE = ComputedField(@at (Cell, Cell, Cell) (u^2 + v^2 + w^2) / 2)
 simulation.output_writers[:fields] = JLD2OutputWriter(model,
-                                                      merge(model.velocities, model.tracers),
+                                                      merge(model.velocities, model.tracers, (ke=KE,)),
                                                       schedule = TimeInterval(1minute),
                                                       prefix = "slanted_plume",
                                                       force = true)
@@ -95,3 +97,29 @@ end
 
 gif(anim, "slanted_plume.gif", fps=15)
 mp4(anim, "slanted_plume.mp4", fps=15)
+
+KE_domain_mean = zeros(length(iterations))
+KE_domain_max = zeros(length(iterations))
+KE_immersed_mean = zeros(length(iterations))
+KE_immersed_max = zeros(length(iterations))
+
+for (i, iteration) in enumerate(iterations)
+    KE = file["timeseries/ke/$iteration"][1, :, :]
+    KE_domain_mean[i] = mean(KE[.~mask])
+    KE_domain_max[i] = maximum(KE[.~mask])
+    KE_immersed_mean[i] = mean(KE[mask])
+    KE_immersed_max[i] = maximum(KE[mask])
+end
+
+times = [file["timeseries/t/$i"] for i in iterations] / 3600
+ke_plot = plot(times[2:end], KE_domain_mean[2:end], linewidth=2, label="domain mean", yaxis=:log, color=:blue,
+	       title="Slanted plume kinetic energy statistics", xlabel="hours", ylabel="kinetic energy",
+	       xlims=extrema(times), grid=false, legend=:outertopright, framestyle=:box,
+               foreground_color_legend=nothing, background_color_legend=nothing, dpi=200)
+
+plot!(ke_plot, times[2:end], KE_domain_max[2:end], linewidth=2, label="domain max", color=:red)
+plot!(ke_plot, times[2:end], KE_immersed_mean[2:end], linewidth=2, label="immersed mean", color=:blue, linestyle=:dot)
+plot!(ke_plot, times[2:end], KE_immersed_max[2:end], linewidth=2, label="immersed max", color=:red, linestyle=:dot)
+
+savefig(ke_plot, "slanted_plume_kinetic_energy.png")
+
