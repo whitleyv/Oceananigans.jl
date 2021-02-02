@@ -16,7 +16,7 @@ using Oceananigans.TurbulenceClosures: ν₀, κ₀, with_tracers, DiffusivityFi
 using Oceananigans.LagrangianParticleTracking: LagrangianParticles
 using Oceananigans.Utils: inflate_halo_size, tupleit
 
-mutable struct IncompressibleModel{TS, E, A<:AbstractArchitecture, G, T, B, R, SW, U, C, Φ, F,
+mutable struct IncompressibleModel{TS, E, FS, A<:AbstractArchitecture, G, T, B, R, SW, U, C, Φ, F,
                                    V, S, K, BG, P} <: AbstractModel{TS}
          architecture :: A         # Computer `Architecture` on which `Model` is run
                  grid :: G         # Grid of physical points on which `Model` is solved
@@ -25,6 +25,7 @@ mutable struct IncompressibleModel{TS, E, A<:AbstractArchitecture, G, T, B, R, S
              buoyancy :: B         # Set of parameters for buoyancy model
              coriolis :: R         # Set of parameters for the background rotation rate of `Model`
         surface_waves :: SW        # Set of parameters for surfaces waves via the Craik-Leibovich approximation
+         free_surface :: FS        # Free surface implementation
               forcing :: F         # Container for forcing functions defined by the user
               closure :: E         # Diffusive 'turbulence closure' for all model fields
     background_fields :: BG        # Background velocity and tracer fields
@@ -80,25 +81,26 @@ Keyword arguments
                      `:RungeKutta3`.
 """
 function IncompressibleModel(;
-                   grid,
-           architecture::AbstractArchitecture = CPU(),
-             float_type = Float64,
-                  clock = Clock{float_type}(0, 0, 1),
-              advection = CenteredSecondOrder(),
-               buoyancy = SeawaterBuoyancy(float_type),
-               coriolis = nothing,
-          surface_waves = nothing,
-                forcing::NamedTuple = NamedTuple(),
-                closure = IsotropicDiffusivity(float_type, ν=ν₀, κ=κ₀),
-    boundary_conditions::NamedTuple = NamedTuple(),
-                tracers = (:T, :S),
-            timestepper = :QuasiAdamsBashforth2,
-      background_fields::NamedTuple = NamedTuple(),
-              particles::Union{Nothing,LagrangianParticles} = nothing,
-             velocities = nothing,
-              pressures = nothing,
-          diffusivities = nothing,
-        pressure_solver = nothing
+                                              grid,
+                architecture::AbstractArchitecture = CPU(),
+                                        float_type = Float64,
+                                             clock = Clock{float_type}(0, 0, 1),
+                                         advection = CenteredSecondOrder(),
+                                          buoyancy = SeawaterBuoyancy(float_type),
+                                          coriolis = nothing,
+                                     surface_waves = nothing,
+                                      free_surface = nothing,
+                               forcing::NamedTuple = NamedTuple(),
+                                           closure = IsotropicDiffusivity(float_type, ν=ν₀, κ=κ₀),
+                   boundary_conditions::NamedTuple = NamedTuple(),
+                                           tracers = (:T, :S),
+                                       timestepper = :QuasiAdamsBashforth2,
+                     background_fields::NamedTuple = NamedTuple(),
+    particles::Union{Nothing, LagrangianParticles} = nothing,
+                                        velocities = nothing,
+                                         pressures = nothing,
+                                     diffusivities = nothing,
+                                   pressure_solver = nothing
     )
 
     if architecture == GPU() && !has_cuda()
@@ -146,7 +148,7 @@ function IncompressibleModel(;
     closure = with_tracers(tracernames(tracers), closure)
 
     return IncompressibleModel(architecture, grid, clock, advection, buoyancy, coriolis, surface_waves,
-                               forcing, closure, background_fields, particles, velocities, tracers,
+                               free_surface, forcing, closure, background_fields, particles, velocities, tracers,
                                pressures, diffusivities, timestepper, pressure_solver)
 end
 

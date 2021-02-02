@@ -36,7 +36,7 @@ Update the predictor velocities u, v, and w with the non-hydrostatic pressure vi
 end
 
 "Update the solution variables (velocities and tracers)."
-function pressure_correct_velocities!(model::IncompressibleModel, Δt)
+function pressure_correct_velocities!(model::IncompressibleModel{T, E, <:Nothing}, Δt) where {T, E}
 
     event = launch!(model.architecture, model.grid, :xyz,
                     _pressure_correct_velocities!,

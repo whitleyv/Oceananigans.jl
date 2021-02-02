@@ -15,6 +15,8 @@ include("incompressible_model.jl")
 include("non_dimensional_model.jl")
 include("show_incompressible_model.jl")
 include("set_incompressible_model.jl")
+include("hydrostatic_pressure.jl")
+include("free_surface.jl")
 
 #####
 ##### Time-stepping IncompressibleModels
