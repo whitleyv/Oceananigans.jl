@@ -24,6 +24,8 @@
 
 using Oceananigans, Oceananigans.Advection
 
+using Oceananigans.Models.IncompressibleModels: HydrostaticPressure, ImplicitFreeSurface
+
 grid = RegularCartesianGrid(size=(128, 128, 1), extent=(2π, 2π, 2π))
 
 model = IncompressibleModel(timestepper = :RungeKutta3, 
@@ -31,6 +33,9 @@ model = IncompressibleModel(timestepper = :RungeKutta3,
                                    grid = grid,
                                buoyancy = nothing,
                                 tracers = nothing,
+                               coriolis = nothing,
+                           free_surface = ImplicitFreeSurface(),
+                              pressures = HydrostaticPressure(),
                                 closure = IsotropicDiffusivity(ν=1e-5)
                            )
 
