@@ -3,10 +3,12 @@
 #####
 
 @inline ∂xᶜᵃᵃ(i, j, k, grid::ARG, u) = δxᶜᵃᵃ(i, j, k, grid, u) / Δx(i, j, k, grid)
-@inline ∂xᶠᵃᵃ(i, j, k, grid::ARG, c) = δxᶠᵃᵃ(i, j, k, grid, c) / Δx(i, j, k, grid)
+# @inline ∂xᶠᵃᵃ(i, j, k, grid::ARG, c) = δxᶠᵃᵃ(i, j, k, grid, c) / Δx(i, j, k, grid)
+@inline ∂xᶠᵃᵃ(i, j, k, grid::Union{ARG, AHCG}, c) = δxᶠᵃᵃ(i, j, k, grid, c) / Δxᶠᵃᵃ(i, j, k, grid)
 
 @inline ∂yᵃᶜᵃ(i, j, k, grid::ARG, v) = δyᵃᶜᵃ(i, j, k, grid, v) / Δy(i, j, k, grid)
-@inline ∂yᵃᶠᵃ(i, j, k, grid::ARG, c) = δyᵃᶠᵃ(i, j, k, grid, c) / Δy(i, j, k, grid)
+# @inline ∂yᵃᶠᵃ(i, j, k, grid::ARG, c) = δyᵃᶠᵃ(i, j, k, grid, c) / Δy(i, j, k, grid)
+@inline ∂yᵃᶠᵃ(i, j, k, grid::Union{ARG, AHCG}, c) = δyᵃᶠᵃ(i, j, k, grid, c) / Δyᵃᶠᵃ(i, j, k, grid)
 
 @inline ∂zᵃᵃᶜ(i, j, k, grid::Union{ARG, AHCG}, w) = δzᵃᵃᶜ(i, j, k, grid, w) / Δzᵃᵃᶜ(i, j, k, grid)
 @inline ∂zᵃᵃᶠ(i, j, k, grid::Union{ARG, AHCG}, c) = δzᵃᵃᶠ(i, j, k, grid, c) / Δzᵃᵃᶠ(i, j, k, grid)
