@@ -1,10 +1,11 @@
 using Logging
 using JLD2
 using BenchmarkTools
+using Benchmarks
 
 using Oceananigans
 using Oceananigans.Models
-using Benchmarks
+using CUDA
 
 Logging.global_logger(OceananigansLogger())
 
@@ -13,7 +14,7 @@ Ny = parse(Int, ARGS[2])
 
 T = Threads.nthreads()
 
-@info "Setting up serial shallow water model with N=($Nx, $Ny) grid points with $T threads..."
+@info "Setting up serial shallow water model with N=($Nx, $Ny) grid points and $T threads..."
 
  topo = (Periodic, Periodic, Bounded)   # Use Flat
  grid = RegularRectilinearGrid(topology=topo, size=(Nx, Ny, 1), extent=(1, 1, 1))
@@ -28,6 +29,7 @@ time_step!(model, 1) # warmup
 
 trial = @benchmark begin
     @sync_gpu time_step!($model, 1)
+    CUDA.@sync blocking=true time_step!($model, 1)
 end samples=10
 
 t_median = BenchmarkTools.prettytime(median(trial).time)

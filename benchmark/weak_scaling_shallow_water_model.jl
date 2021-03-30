@@ -22,6 +22,8 @@ rank_size(R, ::Pencil) = Int.((√R, √R))
 
 print_system_info()
 
+JULIA_NUM_THEADS = 1
+
 for R in ranks
     Nx, Ny = grid_size(R, decomposition)
     Rx, Ry = rank_size(R, decomposition)
