@@ -158,6 +158,7 @@ function solve_poisson_equation!(solver::PreconditionedConjugateGradientSolver, 
     r.parent .= RHS.parent .- A(x; args...).parent
     ### println("PreconditionedConjugateGradientSolver ", i," RHS ", norm(RHS.parent) )
     ### println("PreconditionedConjugateGradientSolver ", i," A(x) ", norm(A(x; args...).parent) )
+    tol = norm(r.parent)*1E-7
 
     while true
         ### println("PreconditionedConjugateGradientSolver ", i," norm(r.parent) ", norm(r.parent) )
@@ -212,7 +213,7 @@ function solve_poisson_equation!(solver::PreconditionedConjugateGradientSolver, 
        i    = i+1
       end
 ==#
-      println("PreconditionedConjugateGradientSolver ", i," ", norm(r.parent) )
+      ### println("PreconditionedConjugateGradientSolver ", i," ", norm(r.parent) )
 
     fill_halo_regions!(x, sset.bcs, sset.arch, sset.grid)
     return x, norm(r.parent)

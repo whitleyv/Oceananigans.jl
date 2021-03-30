@@ -11,7 +11,8 @@ using Oceananigans.Coriolis:
 using Oceananigans.Models.HydrostaticFreeSurfaceModels:
     HydrostaticFreeSurfaceModel,
     VectorInvariant,
-    ExplicitFreeSurface
+    ExplicitFreeSurface,
+    ImplicitFreeSurface
 
 using Oceananigans.TurbulenceClosures: HorizontallyCurvilinearAnisotropicDiffusivity
 using Oceananigans.Utils: prettytime, hours, day, days, years
@@ -21,16 +22,17 @@ using Statistics
 using JLD2
 using Printf
 
-Nx = 12 * 60
-Ny = 12 * 60
+Nx = 60
+Ny = 60
 
 # A spherical domain
 grid = RegularLatitudeLongitudeGrid(size = (Nx, Ny, 1),
                                     longitude = (-30, 30),
                                     latitude = (15, 75),
-                                    z = (-4000, 0))
+                                    z = (-500, 0))
 
-free_surface = ExplicitFreeSurface(gravitational_acceleration=0.01)
+# free_surface = ExplicitFreeSurface(gravitational_acceleration=9.81)
+free_surface = ImplicitFreeSurface(gravitational_acceleration=9.81)
 
 coriolis = HydrostaticSphericalCoriolis(scheme = VectorInvariantEnstrophyConserving())
 
@@ -66,14 +68,14 @@ u_bcs = UVelocityBoundaryConditions(grid,
 v_bcs = VVelocityBoundaryConditions(grid,
                                     bottom = v_bottom_drag_bc)
                                         
-@show const νh₀ = 2e4 * (60 / grid.Nx)^2
+@show const νh₀ = 1e4 * (60 / grid.Nx)
 
-@inline νh(λ, φ, z, t) = νh₀ * cos(π * φ / 180)
+@inline νh(λ, φ, z, t) = νh₀ * (cos(π * φ / 180)^2)
 
 variable_horizontal_diffusivity = HorizontallyCurvilinearAnisotropicDiffusivity(νh=νh)
 
 model = HydrostaticFreeSurfaceModel(grid = grid,
-                                    architecture = GPU(),
+                                    architecture = CPU(),
                                     momentum_advection = VectorInvariant(),
                                     free_surface = free_surface,
                                     coriolis = coriolis,
@@ -108,9 +110,10 @@ function (p::Progress)(sim)
 end
 
 simulation = Simulation(model,
-                        Δt = 0.2wave_propagation_time_scale,
-                        stop_time = 3years,
-                        iteration_interval = 100,
+                        # Δt = 0.2wave_propagation_time_scale,
+                        Δt = 3600,
+                        stop_time = 360days,
+                        iteration_interval = 10,
                         progress = Progress(time_ns()))
                                                          
 output_fields = merge(model.velocities, (η=model.free_surface.η,))

@@ -6,13 +6,16 @@ calculate_pressure_correction!(::HydrostaticFreeSurfaceModel, Δt) = nothing
 ##### Barotropic pressure correction for models with a free surface
 #####
 
-pressure_correct_velocities!(model::HydrostaticFreeSurfaceModel{T, E, A, <:ExplicitFreeSurface}, Δt) where {T, E, A} = nothing
+pressure_correct_velocities!(model::HydrostaticFreeSurfaceModel{T, E, A, <:ExplicitFreeSurface}, Δt) where {T, E, A} = 
+( println("pressure_correct_velocities! explicit"); return nothing )
 
 #####
 ##### Barotropic pressure correction for models with a free surface
 #####
 
 function pressure_correct_velocities!(model::HydrostaticFreeSurfaceModel{T, E, A, <:ImplicitFreeSurface}, Δt) where {T, E, A}
+
+    ## println("pressure_correct_velocities! implicit")
 
     event = launch!(model.architecture, model.grid, :xyz,
                     _barotropic_pressure_correction,
