@@ -42,18 +42,27 @@ struct ZonallyStretchedRectilinearGrid{FT, TX, TY, TZ, R, A} <: AbstractRectilin
 end
 
 # FJP: since this is for ShallowWater, should the default in z be Flat?
-function ZonallyStretchedRectilinearGrid(FT=Float64; architecture = CPU(),
-                                              size, xF, y, z,
-                                              halo = (1, 1, 1),
-                                          topology = (Bounded, Periodic, Periodic))
+function ZonallyStretchedRectilinearGrid(FT=Float64; 
+                                   architecture = CPU(),
+                                           size, 
+                                           xF, 
+                                              y = nothing, 
+                                              z = nothing,
+                                         extent = nothing,
+                                       topology = (Bounded, Periodic, Periodic),
+                                           halo = nothing
+                                       )
 
-    TX, TY, TZ = validate_topology(topology)
-    size = validate_size(TX, TY, TZ, size)
-    halo = validate_halo(TX, TY, TZ, halo)
-    Lx, Ly, x, y = validate_zonally_stretched_grid_yz(TY, TZ, FT, y, z)
+      TX, TY, TZ = validate_topology(topology)
+      print(TX, TY, TZ, size, "\n")
+            size = validate_size(TX, TY, TZ, size)
+            halo = validate_halo(TX, TY, TZ, halo)
+    Ly, Lz, y, z = validate_zonally_stretched_grid_yz(TY, TZ, FT, extent, y, z)
 
+    # Unpacking
     Nx, Ny, Nz = size
     Hx, Hy, Hz = halo
+             L = (xF[end], Ly, Lz)
 
     # Initialize zonally-stretched arrays on CPU
     Lx, xᶠᵃᵃ, xᶜᵃᵃ, Δxᶜᵃᵃ, Δxᶠᵃᵃ = generate_stretched_zonal_grid(FT, topology[3], Nx, Hx, xF)
@@ -111,14 +120,14 @@ function ZonallyStretchedRectilinearGrid(FT=Float64; architecture = CPU(),
 
     # Seems needed to avoid out-of-bounds error in viscous dissipation
     # operators wanting to access Δxᶠᵃᵃ[Nx+2].
-    Δxᶠᵃᵃ = OffsetArray(cat(Δxᶠᵃᵃ[0], Δxᶠᵃᵃ..., Δxᶠᵃᵃᶠ[Nx], dims=1), -Hx-1)
+    Δxᶠᵃᵃ = OffsetArray(cat(Δxᶠᵃᵃ[0], Δxᶠᵃᵃ..., Δxᶠᵃᵃ[Nx], dims=1), -Hx-1)
 
     # Convert to appropriate array type for arch
     xᶠᵃᵃ  = OffsetArray(arch_array(architecture,  xᶠᵃᵃ.parent),  xᶠᵃᵃ.offsets...)
     xᶜᵃᵃ  = OffsetArray(arch_array(architecture,  xᶜᵃᵃ.parent),  xᶜᵃᵃ.offsets...)
     Δxᶜᵃᵃ = OffsetArray(arch_array(architecture, Δxᶜᵃᵃ.parent), Δxᶜᵃᵃ.offsets...)
     Δxᶠᵃᵃ = OffsetArray(arch_array(architecture, Δxᶠᵃᵃ.parent), Δxᶠᵃᵃ.offsets...)
-
+    
     return ZonallyStretchedRectilinearGrid{FT, TX, TY, TZ, typeof(xᶠᵃᵃ), typeof(zᵃᵃᶠ)}(
         Nx, Ny, Nz, Hx, Hy, Hz, Lx, Ly, Lz, Δxᶜᵃᵃ, Δxᶠᵃᵃ , Δy, Δz, xᶜᵃᵃ, yᵃᶜᵃ, zᵃᵃᶜ, xᶠᵃᵃ, yᵃᶠᵃ, zᵃᵃᶠ)
 end
@@ -156,6 +165,7 @@ function generate_stretched_zonal_grid(FT, x_topo, Nx, Hx, xF_generator)
     xF₋ = [x¹   - sum(ΔxF₋[i:Hx]) for i = 1:Hx] # locations of faces in lower halo
     xF₊ = [xᴺ⁺¹ + ΔxF₊[i]         for i = 1:Hx] # locations of faces in width of top halo region
 
+    # FJP: why not use OffsetArrays to put halos beyond physical limits?
     xF = vcat(xF₋, interior_xF, xF₊)
 
     # Build cell centers, cell center spacings, and cell interface spacings
@@ -165,9 +175,9 @@ function generate_stretched_zonal_grid(FT, x_topo, Nx, Hx, xF_generator)
 
     # Trim face locations for periodic domains
     TFx = total_length(Face, x_topo, Nx, Hx)
-    xF = xF[1:TFx]
+    # FJP: this cuts off the halo value at the end.  Seems wrong
+    #xF = xF[1:TFx]
 
-    #FJP: what if Flat????
     ΔxF = [xF[i + 1] - xF[i] for i = 1:TFx-1]
 
     return Lx, xF, xC, ΔxF, ΔxC
