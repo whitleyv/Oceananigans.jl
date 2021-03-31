@@ -37,6 +37,20 @@ The operators in this file fall into three categories:
 #####
 
 @inline Δx(i, j, k, grid::ARG) = grid.Δx
+
+#FJP: do we need to define ΔxC and ΔxF?
+@inline ΔxC(i, j, k, grid::RegularRectilinearGrid) = grid.Δx
+@inline ΔxC(i, j, k, grid::ZonallyStretchedRectilinearGrid) = @inbounds grid.Δxᶠᵃᵃ[i]
+
+@inline ΔxF(i, j, k, grid::RegularRectilinearGrid) = grid.Δx
+@inline ΔxF(i, j, k, grid::ZonallyStretchedRectilinearGrid) = @inbounds grid.Δxᶜᵃᵃ[i]
+
+@inline Δxᶠᵃᵃ(i, j, k, grid::RegularRectilinearGrid) = grid.Δx
+@inline Δxᶠᵃᵃ(i, j, k, grid::ZonallyStretchedRectilinearGrid) = @inbounds grid.Δxᶠᵃᵃ[i]
+
+@inline Δxᶜᵃᵃ(i, j, k, grid::RegularRectilinearGrid) = grid.Δx
+@inline Δxᶜᵃᵃ(i, j, k, grid::ZonallyStretchedRectilinearGrid) = @inbounds grid.Δxᶜᵃᵃ[i]
+
 @inline Δy(i, j, k, grid::ARG) = grid.Δy
 
 @inline ΔzC(i, j, k, grid::RegularRectilinearGrid) = grid.Δz
@@ -56,6 +70,7 @@ The operators in this file fall into three categories:
 ##### makes volumes correct as we want to multiply by 1, and avoids issues with
 ##### derivatives such as those involved in the pressure correction step.
 #####
+
 
 using Oceananigans.Grids: Flat
 

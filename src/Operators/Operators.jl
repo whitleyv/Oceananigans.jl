@@ -31,7 +31,8 @@ export
 ##### Convinient aliases
 #####
 
-using Oceananigans.Grids: RegularRectilinearGrid, VerticallyStretchedRectilinearGrid, RegularLatitudeLongitudeGrid
+using Oceananigans.Grids: RegularRectilinearGrid, VerticallyStretchedRectilinearGrid, ZonallyStretchedRectilinearGrid
+using Oceananigans.Grids: RegularLatitudeLongitudeGrid
 using Oceananigans.Grids: AbstractGrid, AbstractRectilinearGrid, AbstractCurvilinearGrid, AbstractHorizontallyCurvilinearGrid
 
 const AG  = AbstractGrid
