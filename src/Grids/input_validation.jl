@@ -124,32 +124,16 @@ function validate_vertically_stretched_grid_xy(TX, TY, FT, x, y)
     return FT(Lx), FT(Ly), FT.(x), FT.(y)
 end
 
-function validate_zonally_stretched_grid_yz(TY, TZ, FT, extent, y, z)
+# No difference between this and reglar version, except for extent is taken into consideration
+function validate_zonally_stretched_grid(TX, TY, TZ, FT, extent, x, y, z)
 
-    if !isnothing(extent)
+    x = validate_dimension_specification(TX, x, :x)
+    y = validate_dimension_specification(TY, y, :y)
+    z = validate_dimension_specification(TZ, z, :z)
 
-        (!isnothing(y) || !isnothing(z)) &&
-            throw(ArgumentError("Cannot specify both 'extent' and 'x, y, z' keyword arguments."))
+    Lx = x[2] - x[1]
+    Ly = y[2] - y[1]
+    Lz = z[2] - z[1]
 
-        #FJP: what to do with extent?
-        #extent = tupleit(extent)
-
-        #validate_tupled_argument(extent, Number, "extent", topological_tuple_length(TY, TZ))
-    
-        #Ly, Lz = extent = inflate_tuple(TY, TZ, extent, default=0)
-
-        # An "oceanic" default domain:
-        #y = (  0, Ly)
-        #z = (-Lz,  0)
-    else
-
-        y = validate_dimension_specification(TY, y, :y)
-        z = validate_dimension_specification(TZ, z, :z)
-    
-        Ly = y[2] - y[1]
-        Lz = z[2] - z[1]
-    end
-
-
-    return FT(Ly), FT(Lz), FT.(y), FT.(z)
+    return FT(Lx), FT(Ly), FT(Lz), FT.(x), FT.(y), FT.(z)
 end
