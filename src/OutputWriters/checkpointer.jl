@@ -271,7 +271,7 @@ function set!(model, filepath::AbstractString)
             copyto!(tendency⁻_field.data.parent, parent_data)
         end
 
-        copyto!(model.particles.particles, file["particles"])
+        # copyto!(model.particles.particles, file["particles"])
 
         checkpointed_clock = file["clock"]
 
