@@ -9,6 +9,7 @@ include("cubed_sphere_faces.jl")
 include("cubed_sphere_set!.jl")
 include("cubed_sphere_halo_filling.jl")
 include("cubed_sphere_kernel_launching.jl")
+include("cubed_sphere_conjugate_gradient_solver.jl")
 
 #####
 ##### Validating cubed sphere stuff
