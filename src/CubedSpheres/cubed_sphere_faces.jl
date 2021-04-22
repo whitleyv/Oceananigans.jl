@@ -6,7 +6,7 @@ using OffsetArrays: OffsetArray
 import Base: getindex, size, show, minimum, maximum
 import Statistics: mean
 
-import Oceananigans.Fields: AbstractField, AbstractDataField, AbstractReducedField, Field, new_data, minimum, maximum, mean, location
+import Oceananigans.Fields: AbstractField, AbstractDataField, AbstractReducedField, Field, ReducedField, new_data, minimum, maximum, mean, location
 import Oceananigans.BoundaryConditions: FieldBoundaryConditions
 
 struct CubedSphereFaces{E, F}
@@ -23,6 +23,7 @@ const CubedSphereData = CubedSphereFaces{<:OffsetArray}
 
 # Flavors of CubedSphereField
 const CubedSphereField = Field{X, Y, Z, A, <:CubedSphereData} where {X, Y, Z, A}
+const CubedSphereReducedField = ReducedField{X, Y, Z, A, D, <:ConformalCubedSphereGrid} where {X, Y, Z, A, D}
 const CubedSphereAbstractField = AbstractField{X, Y, Z, A, <:ConformalCubedSphereGrid} where {X, Y, Z, A}
 const CubedSphereAbstractDataField = AbstractDataField{X, Y, Z, A, <:ConformalCubedSphereGrid} where {X, Y, Z, A}
 const CubedSphereAbstractReducedField = AbstractReducedField{X, Y, Z, A, D, <:ConformalCubedSphereFaceGrid} where {X, Y, Z, A, D}
@@ -82,7 +83,7 @@ Base.size(data::CubedSphereData) = (size(data.faces[1])..., length(data.faces))
                           get_face(field.boundary_conditions, face_index))
 end
 
-@inline function get_face(reduced_field::CubedSphereAbstractReducedField, face_index)
+@inline function get_face(reduced_field::CubedSphereReducedField, face_index)
     X, Y, Z = location(reduced_field)
 
     return ReducedField{X, Y, Z}(get_face(reduced_field.data, face_index),

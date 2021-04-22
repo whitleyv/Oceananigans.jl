@@ -45,7 +45,7 @@ function FreeSurface(free_surface::ImplicitFreeSurface{Nothing}, velocities, arc
 
     implicit_step_solver = PreconditionedConjugateGradientSolver(implicit_free_surface_linear_operation!,
                                                                  template_field = η,
-                                                                 maximum_iterations = grid.Nx * grid.Ny;
+                                                                 maximum_iterations = prod(size(grid));
                                                                  free_surface.solver_settings...)
 
     implicit_step_right_hand_side = ReducedField(Center, Center, Nothing, arch, grid; dims=3)
