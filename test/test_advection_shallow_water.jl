@@ -46,20 +46,20 @@ halos(::WENO5)                  = 3
 U  = 1
 L  = 2.5
 W  = 0.1
-Ns = 2 .^ (6:8)
+Ns = 2 .^ (6:10)
 Δt = 0.01 * minimum(L/Ns) / U
 pnorm = 1
 
-c(x, t, U, W) = exp( - (x - U * t)^2 / W^2 )
+c(x, y, z, t, U, W) = exp( - (x - U * t)^2 / W^2 )
    h(x, y, z) = 1
   uh(x, y, z) = 1 
 
 schemes = (
  CenteredSecondOrder(), 
  UpwindBiasedThirdOrder(), 
-# CenteredFourthOrder(), 
-# UpwindBiasedFifthOrder(), 
-# WENO5()
+ CenteredFourthOrder(), 
+ UpwindBiasedFifthOrder(), 
+ WENO5()
 );
 
 error = Dict()
@@ -78,7 +78,7 @@ for N in Ns, scheme in schemes
                                 gravitational_acceleration = 0,
                                 tracers = (:c))
 
-    set!(model, h = h, uh = uh, c = (x, y, z) -> c(x, 0, U, W))
+    set!(model, h = h, uh = uh, c = (x, y, z) -> c(x, y, z, 0, U, W))
 
     simulation = Simulation(model, Δt=Δt, stop_iteration=1, iteration_interval=1)
 
@@ -86,7 +86,7 @@ for N in Ns, scheme in schemes
 
     c₁  = c.(grid.xC[:,1,1], 0, 0, Δt, U, W);
 
-    error[(N, scheme)] = norm(abs.(model.solution.c[1:N] .- c₁[1:N]), pnorm)/N^(1/pnorm)   
+    error[(N, scheme)] = norm(abs.(model.tracers.c[1:N] .- c₁[1:N]), pnorm)/N^(1/pnorm)   
 
 end
 
