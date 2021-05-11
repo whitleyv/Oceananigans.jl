@@ -98,10 +98,7 @@ for scheme in schemes
                           log10.([error[(N, scheme)] for N in Ns][2:end]), 1)
 
     ROC[scheme] = best_fit[1]
-    #println(
-    #    "Method = ", scheme, 
-    #    ", Rate of Convergence = ", @sprintf("%.2f", -ROC[scheme]), 
-    #    ", Expected = ", rate_of_convergence(scheme))
+    
     @printf("Method = % 24s, Rate of Convergence = %.2f, Expected = %d \n", 
     scheme, -ROC[scheme], rate_of_convergence(scheme))
 end
