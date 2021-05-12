@@ -554,7 +554,15 @@ end
         # Testing show function
         topo = (Periodic, Periodic, Periodic)
         grid = RegularRectilinearGrid(topology=topo, size=(3, 7, 9), x=(0, 1), y=(-π, π), z=(0, 2π))
-        show(grid); println();
+
+        @test try
+            show(grid)
+            true
+        catch err
+            error("error in show(::RegularRectilinearGrid)")
+            false
+        end
+
         @test grid isa RegularRectilinearGrid
     end
 
@@ -585,9 +593,15 @@ end
 
             # Testing show function
             Nz = 20
-            grid = VerticallyStretchedRectilinearGrid(architecture=arch, size=(1, 1, Nz), x=(0, 1), y=(0, 1), z_faces=collect(0:Nz).^2)
+            grid = VerticallyStretchedRectilinearGrid(architecture=arch, size=(1, 1, Nz-1), x=(0, 1), y=(0, 1), z_faces=collect(0:Nz).^2)
             
-            @test repr(grid) == "VerticallyStretchedRectilinearGrid{Float64, Periodic, Periodic, Bounded}\n                   domain: x ∈ [0.0, 1.0], y ∈ [0.0, 1.0], z ∈ [0.0, 361.0]\n                 topology: (Periodic, Periodic, Bounded)\n  resolution (Nx, Ny, Nz): (1, 1, 19)\n   halo size (Hx, Hy, Hz): (1, 1, 1)\ngrid spacing (Δx, Δy, Δz): (1.0, 1.0, [min=1.0, max=37.0])"
+            @test try
+                show(grid)
+                true
+            catch err
+                error("error in show(::VerticallyStretchedRectilinearGrid)")
+                false
+            end
             
             @test grid isa VerticallyStretchedRectilinearGrid
         end
@@ -603,7 +617,15 @@ end
 
         # Testing show function
         grid = RegularLatitudeLongitudeGrid(size=(36, 32, 1), longitude=(-180, 180), latitude=(-80, 80), z=(0, 1))
-        show(grid); println();
+        
+        @test try
+            show(grid)
+            true
+        catch err
+            error("error in show(::RegularLatitudeLongitudeGrid)")
+            false
+        end
+
         @test grid isa RegularLatitudeLongitudeGrid
     end
 
@@ -616,7 +638,15 @@ end
 
         # Testing show function
         grid = ConformalCubedSphereFaceGrid(size=(10, 10, 1), z=(0, 1))
-        show(grid); println();
+        
+        @test try
+            show(grid)
+            true
+        catch err
+            error("error in show(::ConformalCubedSphereFaceGrid)")
+            false
+        end
+
         @test grid isa ConformalCubedSphereFaceGrid
     end
 
