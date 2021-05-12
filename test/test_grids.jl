@@ -640,7 +640,7 @@ end
         end
 
         # Testing show function
-        grid = ConformalCubedSphereFaceGrid(architecture=arch, size=(10, 10, 1), z=(0, 1))
+        grid = ConformalCubedSphereFaceGrid(size=(10, 10, 1), z=(0, 1))
     
         @test try
             CUDA.@disallowscalar show(grid); println()
