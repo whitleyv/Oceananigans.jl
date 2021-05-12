@@ -553,13 +553,14 @@ end
 
         # Testing show function
         topo = (Periodic, Periodic, Periodic)
+        
         grid = RegularRectilinearGrid(topology=topo, size=(3, 7, 9), x=(0, 1), y=(-π, π), z=(0, 2π))
 
         @test try
             show(grid)
             true
         catch err
-            error("error in show(::RegularRectilinearGrid)")
+            println("error in show(::RegularRectilinearGrid)")
             false
         end
 
@@ -597,10 +598,11 @@ end
             
             @test try
                 show(grid)
-                true
+                return true
             catch err
-                error("error in show(::VerticallyStretchedRectilinearGrid)")
-                false
+                println("error in show(::VerticallyStretchedRectilinearGrid)")
+                println(sprint(showerror, err))
+                return false
             end
             
             @test grid isa VerticallyStretchedRectilinearGrid
@@ -617,13 +619,14 @@ end
 
         # Testing show function
         grid = RegularLatitudeLongitudeGrid(size=(36, 32, 1), longitude=(-180, 180), latitude=(-80, 80), z=(0, 1))
-        
+    
         @test try
             show(grid)
-            true
+            return true
         catch err
-            error("error in show(::RegularLatitudeLongitudeGrid)")
-            false
+            println("error in show(::RegularLatitudeLongitudeGrid)")
+            println(sprint(showerror, err))
+            return false
         end
 
         @test grid isa RegularLatitudeLongitudeGrid
@@ -637,17 +640,20 @@ end
         end
 
         # Testing show function
-        grid = ConformalCubedSphereFaceGrid(size=(10, 10, 1), z=(0, 1))
+        for arch in archs
+            grid = ConformalCubedSphereFaceGrid(architecture=arch, size=(10, 10, 1), z=(0, 1))
         
-        @test try
-            show(grid)
-            true
-        catch err
-            error("error in show(::ConformalCubedSphereFaceGrid)")
-            false
-        end
+            @test try
+                show(grid)
+                return true
+            catch err
+                println("error in show(::ConformalCubedSphereFaceGrid)")
+                println(sprint(showerror, err))
+                return false
+            end
 
-        @test grid isa ConformalCubedSphereFaceGrid
+            @test grid isa ConformalCubedSphereFaceGrid
+        end
     end
 
     @testset "Conformal cubed sphere face grid from file" begin
