@@ -586,7 +586,9 @@ end
             # Testing show function
             Nz = 20
             grid = VerticallyStretchedRectilinearGrid(architecture=arch, size=(1, 1, Nz), x=(0, 1), y=(0, 1), z_faces=collect(0:Nz).^2)
-            show(grid); println();
+            
+            @test repr(grid) == "VerticallyStretchedRectilinearGrid{Float64, Periodic, Periodic, Bounded}\n                   domain: x ∈ [0.0, 1.0], y ∈ [0.0, 1.0], z ∈ [0.0, 361.0]\n                 topology: (Periodic, Periodic, Bounded)\n  resolution (Nx, Ny, Nz): (1, 1, 19)\n   halo size (Hx, Hy, Hz): (1, 1, 1)\ngrid spacing (Δx, Δy, Δz): (1.0, 1.0, [min=1.0, max=37.0])"
+            
             @test grid isa VerticallyStretchedRectilinearGrid
         end
     end
