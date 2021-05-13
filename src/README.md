@@ -1,6 +1,6 @@
 # AMSC 664 Final Code Report
 
-The actual updates are being done through the [vw/immersed_boundary](https://github.com/CliMA/Oceananigans.jl/tree/vw/arbitrary_immersedboundary) branch in the actual Oceananigans repository. For presentation purposes, I have forked my work here. We are currently in the src folder since there is already an Oceananigans "README" file in the outermost directory.
+The actual updates are being done through the [vw/arbitrary_immersedboundary](https://github.com/CliMA/Oceananigans.jl/tree/vw/arbitrary_immersedboundary) branch in the actual Oceananigans repository. For presentation purposes, I have forked my work here. We are currently in the src folder since there is already an Oceananigans "README" file in the outermost directory.
 
 ## Implementation
 The incompressible model is defined in [here](Models/IncompressibleModels/incompressible_model.jl) where ```immersed_boundary``` is included as an option for the user.
