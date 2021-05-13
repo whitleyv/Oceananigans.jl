@@ -3,9 +3,7 @@
 The actual updates are being done through the [vw/arbitrary_immersedboundary](https://github.com/CliMA/Oceananigans.jl/tree/vw/arbitrary_immersedboundary) branch in the actual Oceananigans repository. For presentation purposes, I have forked my work here. We are currently in the src folder since there is already an Oceananigans "README" file in the outermost directory.
 
 ## Implementation
-The incompressible model is defined in [here](Models/IncompressibleModels/incompressible_model.jl) where ```immersed_boundary``` is included as an option for the user.
-
-Much of the changes have been implemented in the [TimeSteppers](TimeSteppers) directory:
+The incompressible model is defined in [here](Models/IncompressibleModels/incompressible_model.jl) where ```immersed_boundary``` is included as an option for the user. Most of the changes have been implemented here, though some are in the [TimeSteppers](TimeSteppers) directory.
 
 - Within this directory, the script that runs the Runge Kutta time-stepper [runge_kutta_3.jl](TimeSteppers/runge_kutta_3.jl), has been altered to include the velocity and tracer corrections within the stepping.
 
@@ -27,4 +25,4 @@ The required packages to use for Oceananigans are included within the [Project.t
 ## Examples
 
 We have created a simple example, for a general immersed boundary method user to follow as they create their own simulations. This is in the validation folder, [flow_around_cylinder.jl](../validation/immersed_boundaries/flow_around_cylinder.jl). This test is still steady state flow, but it runs on a small domain for a short amount of time, just long enough for the user to get an idea of the differents steps.
-There is another example that includes tracers in the implementation. This is given in, [flow_around_cylinder.jl](../validation/immersed_boundaries/flow_around_cylinder_withTemp.jl)
+There is another example that includes tracers in the implementation. This is given in, [flow_around_cylinder_withTemp.jl](../validation/immersed_boundaries/flow_around_cylinder_withTemp.jl)
